@@ -164,14 +164,14 @@ for the white player to see the board edge (due to how padding works in
 neural networks). This has been fixed in Leela Zero. The inputs are:
 
 ```
-1) Side to move stones at time T=0
-2) Side to move stones at time T=-1  (0 if T=0)
+1) Stones of the side to move at time T
+2) Stones of the side to move at time T-1  (0 if T=0)
 ...
-8) Side to move stones at time T=-8  (0 if T<=7)
-9) Other side stones at time T=0
-10) Other side stones at time T=-1   (0 if T=0)
+8) Stones of the side to move at time T-7  (0 if T<=6)
+9) Stones of the other side at time T
+10) Stones of the other side at time T-1   (0 if T=0)
 ...
-16) Other side stones at time T=-8   (0 if T<=7)
+16) Stones of the other side at time T-7   (0 if T<=6)
 17) All 1 if black is to move, 0 otherwise
 18) All 1 if white is to move, 0 otherwise
 ```
