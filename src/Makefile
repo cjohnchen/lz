@@ -2,7 +2,7 @@ THE_OS := $(shell uname -s)
 
 default:
 	@echo "Detected OS: ${THE_OS}"
-	$(MAKE) CC=cc CXX=~/GCC/bin/g++ \
+	$(MAKE) CC=cc CXX=icpc \
 		CXXFLAGS='$(CXXFLAGS) -Wall -Wextra -pipe -O3 -g -ffast-math -flto -march=native -std=c++14 -DNDEBUG'  \
 		LDFLAGS='$(LDFLAGS) -flto -g' \
 		leelaz
@@ -44,9 +44,9 @@ DYNAMIC_LIBS += -lmkl_rt
 
 CXXFLAGS += -I.
 CPPFLAGS += -MD -MP
-CXXFLAGS += -I/gpfs/home/x/u/xu56/Karst/boost -I/N/soft/rhel6/intel/18.0.0/mkl/include -I/N/u/xu56/Karst/openblas/include
-LDFLAGS += -L/N/u/xu56/Karst/GCC/lib64 -L/gpfs/home/x/u/xu56/Karst/boost/stage/lib -L/N/soft/rhel6/intel/18.0.0/mkl/lib/intel64 -L/N/u/xu56/Karst/openblas/lib 
-
+CXXFLAGS += -I/gpfs/hps/soft/rhel7/intel/18.0.0/mkl/include -I/gpfs/hps/soft/rhel7/boost/gnu/1.64.0/
+LDFLAGS += -L/gpfs/hps/soft/rhel7/intel/18.0.0/mkl/lib/intel64 -L/gpfs/hps/soft/rhel7/boost/gnu/1.64.0/lib
+	
 sources = Network.cpp FullBoard.cpp KoState.cpp Training.cpp \
 	  TimeControl.cpp UCTSearch.cpp GameState.cpp Leela.cpp \
 	  SGFParser.cpp Timing.cpp Utils.cpp FastBoard.cpp \
