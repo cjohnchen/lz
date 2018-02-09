@@ -44,9 +44,11 @@ DYNAMIC_LIBS += -lmkl_rt
 
 CXXFLAGS += -I.
 CPPFLAGS += -MD -MP
-CXXFLAGS += -I/gpfs/hps/soft/rhel7/intel/18.0.0/mkl/include -I/gpfs/hps/soft/rhel7/boost/gnu/1.64.0/
-LDFLAGS += -L/gpfs/hps/soft/rhel7/intel/18.0.0/mkl/lib/intel64 -L/gpfs/hps/soft/rhel7/boost/gnu/1.64.0/lib
-	
+	CXXFLAGS += -I/gpfs/hps/soft/rhel7/intel/18.0.0/mkl/include -I/gpfs/hps/soft/rhel7/boost/gnu/1.64.0/ 
+-I/N/u/xu56/Carbonate/openblas/include
+	LDFLAGS += -L/gpfs/hps/soft/rhel7/intel/18.0.0/mkl/lib/intel64 -L/gpfs/hps/soft/rhel7/boost/gnu/1.64.0/lib 
+-L/N/u/xu56/Carbonate/openblas/lib
+
 sources = Network.cpp FullBoard.cpp KoState.cpp Training.cpp \
 	  TimeControl.cpp UCTSearch.cpp GameState.cpp Leela.cpp \
 	  SGFParser.cpp Timing.cpp Utils.cpp FastBoard.cpp \
