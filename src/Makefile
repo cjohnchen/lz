@@ -28,7 +28,7 @@ ifeq ($(THE_OS),Linux)
 # for Linux with OpenBLAS
 	CXXFLAGS += -I/usr/include/openblas
 	DYNAMIC_LIBS += -lopenblas
-	DYNAMIC_LIBS += -lOpenCL
+	# DYNAMIC_LIBS += -lOpenCL
 endif
 ifeq ($(THE_OS),Darwin)
 # for macOS (comment out the Linux part)
