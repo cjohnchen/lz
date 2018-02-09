@@ -44,7 +44,7 @@
  * built-in. (Accelerate)
  */
 #if !defined(__APPLE__) && !defined(__MACOSX)
-#define USE_OPENBLAS
+//#define USE_OPENBLAS
 #endif
 
 /*
@@ -53,14 +53,14 @@
  * so do not redistribute the resulting binaries. It is fine to use it on your
  * own system.
  */
-//#define USE_MKL
+#define USE_MKL
 /*
  * USE_OPENCL: Use OpenCL acceleration for GPUs. This makes the program a lot
  * faster if you have a recent GPU. Don't use it on CPUs even if they have
  * OpenCL drivers - the BLAS version is much faster for those.
  */
 #ifndef FEATURE_USE_CPU_ONLY
-#define USE_OPENCL
+//#define USE_OPENCL
 #endif
 /*
  * USE_TUNER: Expose some extra command line parameters that allow tuning the
