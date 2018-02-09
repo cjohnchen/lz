@@ -2,7 +2,7 @@ THE_OS := $(shell uname -s)
 
 default:
 	@echo "Detected OS: ${THE_OS}"
-	$(MAKE) CC=cc CXX=CC \
+	$(MAKE) CC=cc CXX=~/GCC/bin/g++ \
 		CXXFLAGS='$(CXXFLAGS) -Wall -Wextra -pipe -O3 -g -ffast-math -flto -march=native -std=c++14 -DNDEBUG'  \
 		LDFLAGS='$(LDFLAGS) -flto -g' \
 		leelaz
@@ -44,8 +44,8 @@ endif
 
 CXXFLAGS += -I.
 CPPFLAGS += -MD -MP
-CXXFLAGS += -I/N/u/xu56/BigRed2/openblas/include -I/N/u/xu56/BigRed2
-LDFLAGS += -L/N/u/xu56/BigRed2/openblas/lib -L/N/soft/cle5/boost/1.65.0/lib
+CXXFLAGS += -I/gpfs/home/x/u/xu56/Karst/boost -I/N/soft/rhel6/intel/18.0.0/mkl/include
+LDFLAGS += -L/N/u/xu56/Karst/GCC/lib64 -L/gpfs/home/x/u/xu56/Karst/boost/stage/lib -L/N/soft/rhel6/intel/18.0.0/mkl/lib/intel64
 
 sources = Network.cpp FullBoard.cpp KoState.cpp Training.cpp \
 	  TimeControl.cpp UCTSearch.cpp GameState.cpp Leela.cpp \
