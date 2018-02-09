@@ -38,14 +38,14 @@ ifeq ($(THE_OS),Darwin)
 endif
 
 # for MKL instead of OpenBLAS
-#DYNAMIC_LIBS += -lmkl_rt
+DYNAMIC_LIBS += -lmkl_rt
 #CXXFLAGS += -I/opt/intel/mkl/include
 #LDFLAGS  += -L/opt/intel/mkl/lib/intel64/
 
 CXXFLAGS += -I.
 CPPFLAGS += -MD -MP
-CXXFLAGS += -I/gpfs/home/x/u/xu56/Karst/boost -I/N/soft/rhel6/intel/18.0.0/mkl/include
-LDFLAGS += -L/N/u/xu56/Karst/GCC/lib64 -L/gpfs/home/x/u/xu56/Karst/boost/stage/lib -L/N/soft/rhel6/intel/18.0.0/mkl/lib/intel64
+CXXFLAGS += -I/gpfs/home/x/u/xu56/Karst/boost -I/N/soft/rhel6/intel/18.0.0/mkl/include -I/N/u/xu56/Karst/openblas/include
+LDFLAGS += -L/N/u/xu56/Karst/GCC/lib64 -L/gpfs/home/x/u/xu56/Karst/boost/stage/lib -L/N/soft/rhel6/intel/18.0.0/mkl/lib/intel64 -L/N/u/xu56/Karst/openblas/lib 
 
 sources = Network.cpp FullBoard.cpp KoState.cpp Training.cpp \
 	  TimeControl.cpp UCTSearch.cpp GameState.cpp Leela.cpp \
