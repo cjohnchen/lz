@@ -60,10 +60,10 @@ deps = $(sources:%.cpp=%.d)
 -include $(deps)
 
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) -D_GLIBCXX_USE_CXX11_ABI=0 $(CXXFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 leelaz: $(objects)
-	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS) $(DYNAMIC_LIBS)
+	$(CXX) -D_GLIBCXX_USE_CXX11_ABI=0 $(LDFLAGS) -o $@ $^ $(LIBS) $(DYNAMIC_LIBS)
 
 clean:
 	-$(RM) leelaz $(objects) $(deps)
