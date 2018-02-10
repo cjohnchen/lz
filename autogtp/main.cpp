@@ -39,7 +39,7 @@
 #include "Console.h"
 
 int main(int argc, char *argv[]) {
-    bool consoleOn = true;
+    bool consoleOn = false;
     QCoreApplication app(argc, argv);
     app.setApplicationName("autogtp");
     app.setApplicationVersion(QString("v%1").arg(AUTOGTP_VERSION));
