@@ -162,6 +162,27 @@ std::vector<float> Network::winograd_transform_f(const std::vector<float>& f,
     return U;
 }
 
+void Network::bn_stddivs_to_conv(std::vector<float>& w,
+                                 std::vector<float>& biases,
+                                 std::vector<float>& bn_stddivs,
+                                 std::vector<float>& bn_means,
+                                 const int outputs, const int channels) {
+
+    for(auto o = 0; o < outputs; o++) {
+        for(auto c = 0; c < channels; c++) {
+            for(auto i = 0; i < 9; i++) {
+                w[o*channels*9 + c*9 + i] *= bn_stddivs[o];
+            }
+        }
+        bn_means[o] *= bn_stddivs[o];
+        bn_stddivs[o] = 1.0f;
+
+        // Move means to convolution biases
+        biases[o] = -bn_means[o];
+        bn_means[o] = 0.0f;
+    }
+}
+
 std::vector<float> Network::zeropad_U(const std::vector<float>& U,
                                       const int outputs, const int channels,
                                       const int outputs_pad,
@@ -333,22 +354,6 @@ void Network::initialize(void) {
         exit(EXIT_FAILURE);
     }
 
-    auto weight_index = size_t{0};
-    // Input convolution
-    // Winograd transform convolution weights
-    conv_weights[weight_index] =
-        winograd_transform_f(conv_weights[weight_index],
-                             channels, INPUT_CHANNELS);
-    weight_index++;
-
-    // Residual block convolutions
-    for (auto i = size_t{0}; i < residual_blocks * 2; i++) {
-		conv_weights[weight_index] =
-            winograd_transform_f(conv_weights[weight_index],
-                                 channels, channels);
-        weight_index++;
-    }
-
     // Biases are not calculated and are typically zero but some networks might
     // still have non-zero biases.
     // Move biases to batchnorm means to make the output match without having
@@ -370,6 +375,22 @@ void Network::initialize(void) {
         conv_pol_b[i] = 0.0f;
     }
 
+    for (auto i = size_t{0}; i < conv_biases.size(); i++) {
+        // Multiply batchnorm scaling factors into convolution weights
+        // and move batchnorm means to convolution biases.
+        bn_stddivs_to_conv(conv_weights[i],
+                            conv_biases[i],
+                            batchnorm_stddivs[i],
+                            batchnorm_means[i],
+                            channels,
+                            i == 0 ? INPUT_CHANNELS : channels);
+
+        // Winograd transform convolution weights
+        conv_weights[i] =
+            winograd_transform_f(conv_weights[i], channels,
+                                 i == 0 ? INPUT_CHANNELS : channels);
+    }
+
 #ifdef USE_OPENCL
     myprintf("Initializing OpenCL.\n");
     opencl.initialize(channels);
@@ -381,7 +402,7 @@ void Network::initialize(void) {
         auto kwg = tuners[2];
         auto vwm = tuners[3];
 
-        weight_index = 0;
+        auto weight_index = 0;
 
         size_t m_ceil = ceilMultiple(ceilMultiple(channels, mwg), vwm);
         size_t k_ceil = ceilMultiple(ceilMultiple(INPUT_CHANNELS, kwg), vwm);
@@ -392,7 +413,7 @@ void Network::initialize(void) {
 
         // Winograd filter transformation changes filter size to 4x4
         opencl_net->push_input_convolution(WINOGRAD_ALPHA, INPUT_CHANNELS, channels,
-                Upad, batchnorm_means[weight_index], batchnorm_stddivs[weight_index]);
+                Upad, conv_biases[weight_index]);
         weight_index++;
 
         // residual blocks
@@ -405,11 +426,9 @@ void Network::initialize(void) {
                                    m_ceil, m_ceil);
             opencl_net->push_residual(WINOGRAD_ALPHA, channels, channels,
                                       Upad1,
-                                      batchnorm_means[weight_index],
-                                      batchnorm_stddivs[weight_index],
+                                      conv_biases[weight_index],
                                       Upad2,
-                                      batchnorm_means[weight_index + 1],
-                                      batchnorm_stddivs[weight_index + 1]);
+                                      conv_biases[weight_index + 1]);
             weight_index += 2;
         }
 
@@ -544,6 +563,7 @@ void Network::winograd_sgemm(const std::vector<float>& U,
 }
 
 void Network::winograd_transform_out(const std::vector<float>& M,
+                                     const std::vector<float>& biases,
                                      std::vector<float>& Y,
                                      const int K) {
     constexpr auto W = 19;
@@ -576,22 +596,26 @@ void Network::winograd_transform_out(const std::vector<float>& M,
                 auto o11 =
                     temp_m[0*4 + 0] + temp_m[0*4 + 1] + temp_m[0*4 + 2] +
                     temp_m[1*4 + 0] + temp_m[1*4 + 1] + temp_m[1*4 + 2] +
-                    temp_m[2*4 + 0] + temp_m[2*4 + 1] + temp_m[2*4 + 2];
+                    temp_m[2*4 + 0] + temp_m[2*4 + 1] + temp_m[2*4 + 2] +
+                    biases[k];
 
                 auto o12 =
                     temp_m[0*4 + 1] - temp_m[0*4 + 2] - temp_m[0*4 + 3] +
                     temp_m[1*4 + 1] - temp_m[1*4 + 2] - temp_m[1*4 + 3] +
-                    temp_m[2*4 + 1] - temp_m[2*4 + 2] - temp_m[2*4 + 3];
+                    temp_m[2*4 + 1] - temp_m[2*4 + 2] - temp_m[2*4 + 3] +
+                    biases[k];
 
                 auto o21 =
                     temp_m[1*4 + 0] + temp_m[1*4 + 1] + temp_m[1*4 + 2] -
                     temp_m[2*4 + 0] - temp_m[2*4 + 1] - temp_m[2*4 + 2] -
-                    temp_m[3*4 + 0] - temp_m[3*4 + 1] - temp_m[3*4 + 2];
+                    temp_m[3*4 + 0] - temp_m[3*4 + 1] - temp_m[3*4 + 2] +
+                    biases[k];
 
                 auto o22 =
                     temp_m[1*4 + 1] - temp_m[1*4 + 2] - temp_m[1*4 + 3] -
                     temp_m[2*4 + 1] + temp_m[2*4 + 2] + temp_m[2*4 + 3] -
-                    temp_m[3*4 + 1] + temp_m[3*4 + 2] + temp_m[3*4 + 3];
+                    temp_m[3*4 + 1] + temp_m[3*4 + 2] + temp_m[3*4 + 3] +
+                    biases[k];
 
                 Y[k*(H*W) + (y)*W + (x)] = o11;
                 if (x + 1 < W) {
@@ -611,6 +635,7 @@ void Network::winograd_transform_out(const std::vector<float>& M,
 void Network::winograd_convolve3(const int outputs,
                                  const std::vector<float>& input,
                                  const std::vector<float>& U,
+                                 const std::vector<float>& biases,
                                  std::vector<float>& V,
                                  std::vector<float>& M,
                                  std::vector<float>& output) {
@@ -620,7 +645,7 @@ void Network::winograd_convolve3(const int outputs,
 
     winograd_transform_in(input, V, input_channels);
     winograd_sgemm(U, V, M, input_channels, outputs);
-    winograd_transform_out(M, output, outputs);
+    winograd_transform_out(M, biases, output, outputs);
 }
 
 template<unsigned int filter_size>
@@ -748,7 +773,8 @@ void Network::forward_cpu(std::vector<float>& input,
     auto V = std::vector<float>(WINOGRAD_TILE * input_channels * tiles);
     auto M = std::vector<float>(WINOGRAD_TILE * output_channels * tiles);
 
-    winograd_convolve3(output_channels, input, conv_weights[0], V, M, conv_out);
+    winograd_convolve3(output_channels, input, conv_weights[0], conv_biases[0],
+            V, M, conv_out);
     batchnorm<361>(output_channels, conv_out,
                    batchnorm_means[0].data(),
                    batchnorm_stddivs[0].data());
@@ -761,7 +787,7 @@ void Network::forward_cpu(std::vector<float>& input,
         std::swap(conv_out, conv_in);
         std::copy(begin(conv_in), end(conv_in), begin(res));
         winograd_convolve3(output_channels, conv_in,
-	                       conv_weights[i], V, M, conv_out);
+	                       conv_weights[i], conv_biases[i], V, M, conv_out);
         batchnorm<361>(output_channels, conv_out,
                        batchnorm_means[i].data(),
                        batchnorm_stddivs[i].data());
@@ -769,7 +795,7 @@ void Network::forward_cpu(std::vector<float>& input,
         output_channels = conv_biases[i + 1].size();
         std::swap(conv_out, conv_in);
         winograd_convolve3(output_channels, conv_in,
-			               conv_weights[i + 1], V, M, conv_out);
+			               conv_weights[i + 1], conv_biases[i + 1], V, M, conv_out);
         batchnorm<361>(output_channels, conv_out,
                        batchnorm_means[i + 1].data(),
                        batchnorm_stddivs[i + 1].data(),
