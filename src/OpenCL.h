@@ -60,8 +60,8 @@ private:
     cl::Kernel m_merge_kernel;
     cl::Kernel m_in_transform_kernel;
     cl::Kernel m_sgemm_kernel;
-    cl::Kernel m_out_transform_bn_kernel;
-    cl::Kernel m_out_transform_bn_in_kernel;
+    cl::Kernel m_out_transform_relu_kernel;
+    cl::Kernel m_out_transform_relu_in_kernel;
     cl::Buffer m_inBuffer;
     cl::Buffer m_inBuffer2;
     cl::Buffer m_VBuffer;
