@@ -596,35 +596,33 @@ void Network::winograd_transform_out(const std::vector<float>& M,
                 auto o11 =
                     temp_m[0*4 + 0] + temp_m[0*4 + 1] + temp_m[0*4 + 2] +
                     temp_m[1*4 + 0] + temp_m[1*4 + 1] + temp_m[1*4 + 2] +
-                    temp_m[2*4 + 0] + temp_m[2*4 + 1] + temp_m[2*4 + 2] +
-                    biases[k];
+                    temp_m[2*4 + 0] + temp_m[2*4 + 1] + temp_m[2*4 + 2];
 
                 auto o12 =
                     temp_m[0*4 + 1] - temp_m[0*4 + 2] - temp_m[0*4 + 3] +
                     temp_m[1*4 + 1] - temp_m[1*4 + 2] - temp_m[1*4 + 3] +
-                    temp_m[2*4 + 1] - temp_m[2*4 + 2] - temp_m[2*4 + 3] +
-                    biases[k];
+                    temp_m[2*4 + 1] - temp_m[2*4 + 2] - temp_m[2*4 + 3];
 
                 auto o21 =
                     temp_m[1*4 + 0] + temp_m[1*4 + 1] + temp_m[1*4 + 2] -
                     temp_m[2*4 + 0] - temp_m[2*4 + 1] - temp_m[2*4 + 2] -
-                    temp_m[3*4 + 0] - temp_m[3*4 + 1] - temp_m[3*4 + 2] +
-                    biases[k];
+                    temp_m[3*4 + 0] - temp_m[3*4 + 1] - temp_m[3*4 + 2];
 
                 auto o22 =
                     temp_m[1*4 + 1] - temp_m[1*4 + 2] - temp_m[1*4 + 3] -
                     temp_m[2*4 + 1] + temp_m[2*4 + 2] + temp_m[2*4 + 3] -
-                    temp_m[3*4 + 1] + temp_m[3*4 + 2] + temp_m[3*4 + 3] +
-                    biases[k];
+                    temp_m[3*4 + 1] + temp_m[3*4 + 2] + temp_m[3*4 + 3];
 
-                Y[k*(H*W) + (y)*W + (x)] = o11;
+                auto bias = biases[k];
+
+                Y[k*(H*W) + (y)*W + (x)] = o11 + bias;
                 if (x + 1 < W) {
-                    Y[k*(H*W) + (y)*W + (x+1)] = o12;
+                    Y[k*(H*W) + (y)*W + (x+1)] = o12 + bias;
                 }
                 if (y + 1 < H) {
-                    Y[k*(H*W) + (y+1)*W + (x)] = o21;
+                    Y[k*(H*W) + (y+1)*W + (x)] = o21 + bias;
                     if (x + 1 < W) {
-                        Y[k*(H*W) + (y+1)*W + (x+1)] = o22;
+                        Y[k*(H*W) + (y+1)*W + (x+1)] = o22 + bias;
                     }
                 }
             }
@@ -753,6 +751,25 @@ void batchnorm(size_t channels,
     }
 }
 
+template <size_t spatial_size>
+void relu(size_t channels,
+          std::vector<float>& data,
+          const float* eltwise = nullptr)
+{
+    auto lambda_ReLU = [](float val) { return (val > 0.0f) ?
+                                       val : 0.0f; };
+
+    for (auto i = size_t{0}; i < spatial_size * channels; ++i) {
+        if (eltwise == nullptr) {
+            // ReLU only
+            data[i] = lambda_ReLU(data[i]);
+        } else {
+            // ReLU + Residual add
+            data[i] = lambda_ReLU(data[i] + eltwise[i]);
+        }
+    }
+}
+
 void Network::forward_cpu(std::vector<float>& input,
                           std::vector<float>& output_pol,
                           std::vector<float>& output_val) {
@@ -775,9 +792,7 @@ void Network::forward_cpu(std::vector<float>& input,
 
     winograd_convolve3(output_channels, input, conv_weights[0], conv_biases[0],
             V, M, conv_out);
-    batchnorm<361>(output_channels, conv_out,
-                   batchnorm_means[0].data(),
-                   batchnorm_stddivs[0].data());
+    relu<361>(output_channels, conv_out);
 
     // Residual tower
     auto conv_in = std::vector<float>(output_channels * width * height);
@@ -788,18 +803,13 @@ void Network::forward_cpu(std::vector<float>& input,
         std::copy(begin(conv_in), end(conv_in), begin(res));
         winograd_convolve3(output_channels, conv_in,
 	                       conv_weights[i], conv_biases[i], V, M, conv_out);
-        batchnorm<361>(output_channels, conv_out,
-                       batchnorm_means[i].data(),
-                       batchnorm_stddivs[i].data());
+        relu<361>(output_channels, conv_out);
 
         output_channels = conv_biases[i + 1].size();
         std::swap(conv_out, conv_in);
         winograd_convolve3(output_channels, conv_in,
 			               conv_weights[i + 1], conv_biases[i + 1], V, M, conv_out);
-        batchnorm<361>(output_channels, conv_out,
-                       batchnorm_means[i + 1].data(),
-                       batchnorm_stddivs[i + 1].data(),
-                       res.data());
+        relu<361>(output_channels, conv_out, res.data());
     }
     convolve<1>(OUTPUTS_POLICY, conv_out, conv_pol_w, conv_pol_b, output_pol);
     convolve<1>(OUTPUTS_VALUE, conv_out, conv_val_w, conv_val_b, output_val);
