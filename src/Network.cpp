@@ -41,7 +41,7 @@
 #ifdef USE_OPENBLAS
 #include <cblas.h>
 #endif
-#ifdef USE_OPENCL
+#ifdef USE_GPU
 #include "OpenCLScheduler.h"
 #include "UCTNode.h"
 #endif
@@ -386,23 +386,25 @@ void Network::initialize(void) {
                             i == 0 ? INPUT_CHANNELS : channels);
 
         // Winograd transform convolution weights
+#ifdef USE_OPENCL
         conv_weights[i] =
             winograd_transform_f(conv_weights[i], channels,
                                  i == 0 ? INPUT_CHANNELS : channels);
+#endif
     }
 
-#ifdef USE_OPENCL
+#ifdef USE_GPU
     myprintf("Initializing OpenCL.\n");
     opencl.initialize(channels);
 
     for(auto & opencl_net : opencl.get_networks()) {
+        auto weight_index = 0;
+#ifdef USE_OPENCL
         auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
 
         auto mwg = tuners[0];
         auto kwg = tuners[2];
         auto vwm = tuners[3];
-
-        auto weight_index = 0;
 
         size_t m_ceil = ceilMultiple(ceilMultiple(channels, mwg), vwm);
         size_t k_ceil = ceilMultiple(ceilMultiple(INPUT_CHANNELS, kwg), vwm);
@@ -410,6 +412,9 @@ void Network::initialize(void) {
         auto Upad = zeropad_U(conv_weights[weight_index],
                               channels, INPUT_CHANNELS,
                               m_ceil, k_ceil);
+#else
+		auto Upad = conv_weights[weight_index];
+#endif
 
         // Winograd filter transformation changes filter size to 4x4
         opencl_net->push_input_convolution(WINOGRAD_ALPHA, INPUT_CHANNELS, channels,
@@ -418,12 +423,17 @@ void Network::initialize(void) {
 
         // residual blocks
         for (auto i = size_t{0}; i < residual_blocks; i++) {
+#ifdef USE_OPENCL
             auto Upad1 = zeropad_U(conv_weights[weight_index],
                                    channels, channels,
                                    m_ceil, m_ceil);
             auto Upad2 = zeropad_U(conv_weights[weight_index + 1],
                                    channels, channels,
                                    m_ceil, m_ceil);
+#else
+			auto Upad1 = conv_weights[weight_index];
+			auto Upad2 = conv_weights[weight_index + 1];
+#endif
             opencl_net->push_residual(WINOGRAD_ALPHA, channels, channels,
                                       Upad1,
                                       conv_biases[weight_index],
@@ -937,9 +947,9 @@ Network::Netresult Network::get_scored_moves_internal(
             }
         }
     }
-#ifdef USE_OPENCL
+#ifdef USE_GPU
     opencl.forward(input_data, policy_data, value_data);
-#elif defined(USE_BLAS) && !defined(USE_OPENCL)
+#elif defined(USE_BLAS) && !defined(USE_GPU)
     forward_cpu(input_data, policy_data, value_data);
 #endif
 #ifdef USE_OPENCL_SELFCHECK
