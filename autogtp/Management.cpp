@@ -1,4 +1,4 @@
-/*
+/* 
     This file is part of Leela Zero.
     Copyright (C) 2017 Marco Calignano
 
@@ -77,6 +77,7 @@ void Management::runTuningProcess(const QString &tuneCmdLine) {
 
 Order Management::getWork(const QFileInfo &file) {
     Order o;
+<<<<<<< HEAD
     if(!file.fileName().isEmpty()) {
         QTextStream(stdout) << "Got previously stored file" <<endl;
         o.load(file.fileName());
@@ -88,6 +89,14 @@ Order Management::getWork(const QFileInfo &file) {
     } else {
         return getWork();
     }
+=======
+    o.load(file.fileName());
+    QFile::remove(file.fileName());
+    m_lockFile->unlock();
+    delete m_lockFile;
+    m_lockFile = nullptr;
+    return o;
+>>>>>>> remotes/origin/patch-6
 }
 
 void Management::giveAssignments() {
