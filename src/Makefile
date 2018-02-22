@@ -26,8 +26,8 @@ LIBS =
 
 ifeq ($(THE_OS),Linux)
 # for Linux with OpenBLAS
-	CUDNN = /N/soft/cle5/cuDNN/cudnn-7.5/cuda/include
-	CUDART = /N/soft/cle5/cuDNN/cudnn-7.5/cuda/lib64
+	CUDNN = /N/u/xu56/cuda/include
+	CUDART = /N/u/xu56/cuda/lib64
 	CXXFLAGS += -I$(CUDNN)
 	DYNAMIC_LIBS += -lopenblas
 	#DYNAMIC_LIBS += -lOpenCL
