@@ -811,10 +811,8 @@ void compare_net_outputs(std::vector<float>& data,
     constexpr float relative_error = 5e-2f;
     for (auto idx = size_t{0}; idx < data.size(); ++idx) {
         auto err = relative_difference(data[idx], ref[idx]);
-        if (err > relative_error) {
-            myprintf("Error in OpenCL calculation: expected %f got %f "
-                   "(error=%f%%)\n", ref[idx], data[idx], err * 100.0);
-            myprintf("Update your GPU drivers or reduce the amount of games "
+        cout << "Error in OpenCL calculation: expected " << ref[idx] << " got " << data[idx] << " (error=" << err * 100.0 << ")" << endl;
+        if (err > relative_error) {myprintf("Update your GPU drivers or reduce the amount of games "
                    "played simultaneously.\n");
             throw std::runtime_error("OpenCL self-check mismatch.");
         }
