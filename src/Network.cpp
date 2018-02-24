@@ -20,6 +20,9 @@
 #include "config.h"
 #include "Network.h"
 
+#include <iostream>
+
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -811,8 +814,9 @@ void compare_net_outputs(std::vector<float>& data,
     constexpr float relative_error = 5e-2f;
     for (auto idx = size_t{0}; idx < data.size(); ++idx) {
         auto err = relative_difference(data[idx], ref[idx]);
-        cout << "Error in OpenCL calculation: expected " << ref[idx] << " got " << data[idx] << " (error=" << err * 100.0 << ")" << endl;
-        if (err > relative_error) {myprintf("Update your GPU drivers or reduce the amount of games "
+	    if (err > relative_error) {
+		    std::cout << "Error in OpenCL calculation: expected " << ref[idx] << " got " << data[idx] << " (error=" << err * 100.0 << ")" << std::endl;
+		    printf("Update your GPU drivers or reduce the amount of games "
                    "played simultaneously.\n");
             throw std::runtime_error("OpenCL self-check mismatch.");
         }
