@@ -381,10 +381,10 @@ Order Management::getWorkInternal(bool tuning) {
         QString net = ob.value("hash").toString();
         fetchNetwork(net);
         o.type(Order::Production);
-        parameters["network"] = net;
+        parameters["network"] = "myweight";
         o.parameters(parameters);
         m_fallBack = o;
-        QTextStream(stdout) << "net: " << net << "." << endl;
+        QTextStream(stdout) << "net: " << "myweight" << "." << endl;
     }
     if (ob.value("cmd").toString() == "match") {
         o.type(Order::Validation);
