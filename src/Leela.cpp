@@ -42,10 +42,11 @@ using namespace Utils;
 
 static void license_blurb() {
     printf(
-        "Leela Zero  Copyright (C) 2017-2018  Gian-Carlo Pascutto and contributors\n"
+        "Leela Zero %s  Copyright (C) 2017-2018  Gian-Carlo Pascutto and contributors\n"
         "This program comes with ABSOLUTELY NO WARRANTY.\n"
         "This is free software, and you are welcome to redistribute it\n"
-        "under certain conditions; see the COPYING file for details.\n\n"
+        "under certain conditions; see the COPYING file for details.\n\n",
+        PROGRAM_VERSION
     );
 }
 
@@ -56,8 +57,7 @@ static void parse_commandline(int argc, char *argv[]) {
     v_desc.add_options()
         ("help,h", "Show commandline options.")
         ("gtp,g", "Enable GTP mode.")
-        ("threads,t", po::value<int>()->default_value
-                      (std::min(2, cfg_num_threads)),
+        ("threads,t", po::value<int>()->default_value(cfg_num_threads),
                       "Number of threads to use.")
         ("playouts,p", po::value<int>(),
                        "Weaken engine by limiting the number of playouts."
@@ -82,6 +82,8 @@ static void parse_commandline(int argc, char *argv[]) {
         ("logfile,l", po::value<std::string>(), "File to log input/output to.")
         ("quiet,q", "Disable all diagnostic output.")
         ("noponder", "Disable thinking on opponent's time.")
+        ("benchmark", "Test network and exit. Default args:\n-v3200 --noponder "
+                      "-m0 -t1 -s1.")
 #ifdef USE_OPENCL
         ("gpu",  po::value<std::vector<int> >(),
                 "ID of the OpenCL device(s) to use (disables autodetection).")
@@ -110,7 +112,7 @@ static void parse_commandline(int argc, char *argv[]) {
                   .options(all).positional(p_desc).run(), vm);
         po::notify(vm);
     }  catch(const boost::program_options::error& e) {
-        myprintf("ERROR: %s\n", e.what());
+        printf("ERROR: %s\n", e.what());
         license_blurb();
         std::cout << v_desc << std::endl;
         exit(EXIT_FAILURE);
@@ -136,6 +138,10 @@ static void parse_commandline(int argc, char *argv[]) {
         cfg_quiet = true;
     }
 
+    if (vm.count("benchmark")) {
+        cfg_quiet = true;  // Set this early to avoid unnecessary output.
+    }
+
 #ifdef USE_TUNER
     if (vm.count("puct")) {
         cfg_puct = vm["puct"].as<float>();
@@ -157,7 +163,7 @@ static void parse_commandline(int argc, char *argv[]) {
     if (vm.count("weights")) {
         cfg_weightsfile = vm["weights"].as<std::string>();
     } else {
-        myprintf("A network weights file is required to use the program.\n");
+        printf("A network weights file is required to use the program.\n");
         exit(EXIT_FAILURE);
     }
 
@@ -165,15 +171,15 @@ static void parse_commandline(int argc, char *argv[]) {
         cfg_gtp_mode = true;
     }
 
-    if (vm.count("threads")) {
-        int num_threads = vm["threads"].as<int>();
-        if (num_threads > cfg_num_threads) {
-            myprintf("Clamping threads to maximum = %d\n", cfg_num_threads);
+    if (!vm["threads"].defaulted()) {
+        auto num_threads = vm["threads"].as<int>();
+        if (num_threads > cfg_max_threads) {
+            myprintf("Clamping threads to maximum = %d\n", cfg_max_threads);
         } else if (num_threads != cfg_num_threads) {
-            myprintf("Using %d thread(s).\n", num_threads);
             cfg_num_threads = num_threads;
         }
     }
+    myprintf("Using %d thread(s).\n", cfg_num_threads);
 
     if (vm.count("seed")) {
         cfg_rng_seed = vm["seed"].as<std::uint64_t>();
@@ -199,9 +205,9 @@ static void parse_commandline(int argc, char *argv[]) {
     if (vm.count("playouts")) {
         cfg_max_playouts = vm["playouts"].as<int>();
         if (!vm.count("noponder")) {
-            myprintf("Nonsensical options: Playouts are restricted but "
-                     "thinking on the opponent's time is still allowed. "
-                     "Add --noponder if you want a weakened engine.\n");
+            printf("Nonsensical options: Playouts are restricted but "
+                   "thinking on the opponent's time is still allowed. "
+                   "Add --noponder if you want a weakened engine.\n");
             exit(EXIT_FAILURE);
         }
     }
@@ -227,7 +233,7 @@ static void parse_commandline(int argc, char *argv[]) {
         } else if (tm == "off") {
             cfg_timemanage = TimeManagement::OFF;
         } else {
-            myprintf("Invalid timemanage value.\n");
+            printf("Invalid timemanage value.\n");
             exit(EXIT_FAILURE);
         }
     }
@@ -258,6 +264,22 @@ static void parse_commandline(int argc, char *argv[]) {
     }
 #endif
 
+    if (vm.count("benchmark")) {
+        // These must be set later to override default arguments.
+        cfg_allow_pondering = false;
+        cfg_benchmark = true;
+        cfg_noise = false;  // Not much of a benchmark if random was used.
+        cfg_random_cnt = 0;
+        cfg_rng_seed = 1;
+        cfg_timemanage = TimeManagement::OFF;  // Reliable number of playouts.
+        if (vm["threads"].defaulted()) {
+            cfg_num_threads = 1;
+        }
+        if (!vm.count("playouts") && !vm.count("visits")) {
+            cfg_max_visits = 3200; // Default to self-play and match values.
+        }
+    }
+
     auto out = std::stringstream{};
     for (auto i = 1; i < argc; i++) {
         out << " " << argv[i];
@@ -287,6 +309,14 @@ void init_global_objects() {
     Network::initialize();
 }
 
+void benchmark(GameState& game) {
+    game.set_timecontrol(0, 1, 0, 0);  // Set infinite time.
+    game.play_textmove("b", "q16");
+    auto search = std::make_unique<UCTSearch>(game);
+    game.set_to_move(FastBoard::WHITE);
+    search->think(FastBoard::WHITE);
+}
+
 int main (int argc, char *argv[]) {
     auto input = std::string{};
 
@@ -305,7 +335,7 @@ int main (int argc, char *argv[]) {
     setbuf(stdin, nullptr);
 #endif
 
-    if (!cfg_gtp_mode) {
+    if (!cfg_gtp_mode && !cfg_benchmark) {
         license_blurb();
     }
 
@@ -315,7 +345,13 @@ int main (int argc, char *argv[]) {
 
     /* set board limits */
     auto komi = 7.5f;
-    maingame->init_game(19, komi);
+    maingame->init_game(BOARD_SIZE, komi);
+
+    if (cfg_benchmark) {
+        cfg_quiet = false;
+        benchmark(*maingame);
+        return 0;
+    }
 
     for(;;) {
         if (!cfg_gtp_mode) {
