@@ -25,6 +25,7 @@
 #include <memory>
 #include <cassert>
 #include <cstring>
+#include <cstdio>
 
 #include "SMP.h"
 
@@ -51,7 +52,7 @@ private:
     // (C-style bit fields and unions are not portable)
     mutable std::atomic<std::uint64_t> m_data{2};
 
-    UCTNode * read_ptr(uint64_t v) const {
+    UCTNode * read_ptr(uint64_t v) const {   
         assert((v & 3ULL) == 1);
         return reinterpret_cast<UCTNode*>(v-1);
     }

@@ -685,8 +685,10 @@ void UCTSearch::ponder() {
         tg.add_task(UCTWorker(m_rootstate, this, m_root.get()));
     }
     auto keeprunning = true;
+    
     Time start;                                                     // lizzie
     int last_update = 0;                                            // lizzie
+    
     do {
         auto currstate = std::make_unique<GameState>(m_rootstate);
         auto result = play_simulation(*currstate, m_root.get());
@@ -695,6 +697,7 @@ void UCTSearch::ponder() {
         }
         keeprunning  = is_running();
         keeprunning &= !stop_thinking(0, 1);
+        
         Time elapsed;                                               // lizzie
         int elapsed_centis = Time::timediff_centis(start, elapsed); // lizzie
         if (elapsed_centis - last_update > 10) { // lizzie: output ponder data 10 times per second
@@ -704,11 +707,15 @@ void UCTSearch::ponder() {
             dump_stats(m_rootstate, *m_root);                       // lizzie
             myprintf("~end\n");                                     // lizzie
         }                                                           // lizzie
+        
     } while(!Utils::input_pending() && keeprunning);
 
     // stop the search
     m_run = false;
     tg.wait_all();
+
+    // inflate all children once more in case the root node was an empty node when starting pondering
+    m_root->inflate_all_children();    
 
     // display search info
     myprintf("\n");
