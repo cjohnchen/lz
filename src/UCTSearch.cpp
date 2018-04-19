@@ -700,7 +700,7 @@ void UCTSearch::ponder() {
         
         Time elapsed;                                               // lizzie
         int elapsed_centis = Time::timediff_centis(start, elapsed); // lizzie
-        if (elapsed_centis - last_update > 10) { // lizzie: output ponder data 10 times per second
+        if (elapsed_centis - last_update > 25) { // lizzie: output ponder data 10 times per second
             last_update = elapsed_centis;                           // lizzie
            
             myprintf("~begin\n");                                   // lizzie
