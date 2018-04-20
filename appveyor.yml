@@ -42,3 +42,16 @@ test_script:
     set PATH=Release;%PATH
 
     if NOT "%run_tests%"=="" tests.exe
+
+deploy:
+  release: leelaz-v$(appveyor_build_version)
+  description: 'Next branch with Lizzie support'
+  provider: GitHub
+  auth_token:
+    secure: 2dPXxQg4KAGZ2+df/yrFpMK+BkL1V6H2FJcxMXP1TmIjvx9Kw5bpQFAt+yGR6YBB # your encrypted token from GitHub
+  artifact: /.*\.nupkg/            # upload all NuGet packages to release assets
+  draft: false
+  prerelease: false
+  on:
+    branch: next_lizzie            # release from master branch only
+    appveyor_repo_tag: true        # deploy on tag push only    
