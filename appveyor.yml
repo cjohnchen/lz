@@ -38,7 +38,9 @@ build_script:
 
 after_build:
     7z.exe a leela_lizzie.zip %APPVEYOR_BUILD_FOLDER%\build\Release\*.dll
+
     7z.exe a leela_lizzie.zip %APPVEYOR_BUILD_FOLDER%\build\Release\*.exe
+    
     7z.exe a leela_lizzie.zip %APPVEYOR_BUILD_FOLDER%\build\Release\*.crt
 
 test_script:
