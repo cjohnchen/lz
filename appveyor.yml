@@ -54,6 +54,7 @@ deploy:
   release: leelaz-v$(appveyor_build_version)
   description: 'Next branch with Lizzie support'
   provider: GitHub
+  force_update: true
   auth_token:
     secure: 2dPXxQg4KAGZ2+df/yrFpMK+BkL1V6H2FJcxMXP1TmIjvx9Kw5bpQFAt+yGR6YBB # your encrypted token from GitHub
   artifact: leela_lizzie.zip         # Win64 binaries
