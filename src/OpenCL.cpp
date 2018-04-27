@@ -1045,7 +1045,12 @@ void OpenCL::initialize(const int channels, const std::vector<int> & gpus,
         best_platform.getInfo<CL_PLATFORM_NAME>().c_str());
     myprintf("Selected device: %s\n",
         trim(best_device.getInfo<CL_DEVICE_NAME>()).c_str());
-    myprintf("with OpenCL %2.1f capability.\n", best_version);
+    myprintf("with OpenCL %2.1f capability and ", best_version);
+    #ifdef USE_HALF
+        myprintf("FP16 precision.\n");
+    #else
+        myprintf("FP32 precision.\n");
+    #endif
 
     cl::Context context;
     try {
