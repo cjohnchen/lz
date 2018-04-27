@@ -61,7 +61,7 @@ deploy:
   draft: false
   prerelease: false
   on:
-    #branch: next_lizzie            # release from next_lizzie branch only
+    branch: next_lizzie            # release from next_lizzie branch only
     appveyor_repo_tag: true        # deploy on tag push only
 
 artifacts:
