@@ -234,18 +234,18 @@ std::string Tuner::tune_sgemm(const int m, const int n, const int k,
         opts = {
             {"MWG", {16, 32, 64}},
             {"NWG", {16, 32, 64}},
-            {"KWG", {32}},
+            {"KWG", {16, 32}},
             {"MDIMC", {8, 16, 32}},
             {"NDIMC", {8, 16, 32}},
             {"MDIMA", {8, 16, 32}},
             {"NDIMB", {8, 16, 32}},
-            {"KWI", {2}},
-            {"VWM", {1, 2, 4}},
-            {"VWN", {1, 2, 4}},
+            {"KWI", {2, 8}},
+            {"VWM", {2, 4}},
+            {"VWN", {2, 4}},
             {"STRM", {0}},
             {"STRN", {0}},
-            {"SA", {0, 1}},
-            {"SB", {0, 1}},
+            {"SA", {1}},
+            {"SB", {1}},
         };
     }
 
@@ -446,7 +446,7 @@ void Tuner::store_sgemm_tuners(const int m, const int n, const int k,
 
     // Write back previous data as long as it's not the device and
     // tuning we just tuned
-    for (const auto& line: file_contents) {
+    for (const auto& line : file_contents) {
         if (line.find(tuning_line_prefix) == std::string::npos
             || line.find(device_name) == std::string::npos) {
             file << line << std::endl;
