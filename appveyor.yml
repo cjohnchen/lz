@@ -5,9 +5,9 @@ skip_non_tags: true
 environment:
   matrix:
   - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
-  - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
-    features: FEATURE_USE_CPU_ONLY
-    run_tests: 0
+  #- APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+  #  features: FEATURE_USE_CPU_ONLY
+  #  run_tests:
 skip_commits:
   files:
     - '**/*.md'
