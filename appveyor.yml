@@ -7,7 +7,7 @@ environment:
   - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
   - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
     features: FEATURE_USE_CPU_ONLY
-    run_tests: 1
+    run_tests: 0
 skip_commits:
   files:
     - '**/*.md'
