@@ -46,8 +46,7 @@ static void license_blurb() {
         "This program comes with ABSOLUTELY NO WARRANTY.\n"
         "This is free software, and you are welcome to redistribute it\n"
         "under certain conditions; see the COPYING file for details.\n\n",
-        PROGRAM_VERSION
-    );
+        PROGRAM_VERSION);
 }
 
 static void parse_commandline(int argc, char *argv[]) {
@@ -84,6 +83,7 @@ static void parse_commandline(int argc, char *argv[]) {
         ("noponder", "Disable thinking on opponent's time.")
         ("benchmark", "Test network and exit. Default args:\n-v3200 --noponder "
                       "-m0 -t1 -s1.")
+        ("blackvalue", "True if the network's value head output the evaluation for black side.")
 #ifdef USE_OPENCL
         ("gpu",  po::value<std::vector<int> >(),
                 "ID of the OpenCL device(s) to use (disables autodetection).")
@@ -140,6 +140,10 @@ static void parse_commandline(int argc, char *argv[]) {
 
     if (vm.count("benchmark")) {
         cfg_quiet = true;  // Set this early to avoid unnecessary output.
+    }
+
+    if (vm.count("blackvalue")) {
+        cfg_blackvalue = true;
     }
 
 #ifdef USE_TUNER
@@ -331,7 +335,7 @@ void benchmark(GameState& game) {
     search->think(FastBoard::WHITE);
 }
 
-int main (int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
     auto input = std::string{};
 
     // Set up engine parameters
@@ -367,7 +371,7 @@ int main (int argc, char *argv[]) {
         return 0;
     }
 
-    for(;;) {
+    for (;;) {
         if (!cfg_gtp_mode) {
             maingame->display_state();
             std::cout << "Leela: ";
