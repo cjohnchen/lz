@@ -84,7 +84,7 @@ bool UCTNode::create_children(std::atomic<int>& nodecount,
     m_net_eval = raw_netlist.winrate;
     const auto to_move = state.board.get_to_move();
     // our search functions evaluate from black's point of view
-    if (state.board.white_to_move() && !cfg_blackvalue) {
+    if (state.board.white_to_move()) {
         m_net_eval = 1.0f - m_net_eval;
     }
     eval = m_net_eval;

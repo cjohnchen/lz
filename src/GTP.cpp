@@ -72,7 +72,6 @@ FILE* cfg_logfile_handle;
 bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
-bool cfg_blackvalue;
 
 void GTP::setup_default_parameters() {
     cfg_gtp_mode = false;
@@ -104,7 +103,6 @@ void GTP::setup_default_parameters() {
     cfg_logfile_handle = nullptr;
     cfg_quiet = false;
     cfg_benchmark = false;
-    cfg_blackvalue = false;
 
     // C++11 doesn't guarantee *anything* about how random this is,
     // and in MinGW it isn't random at all. But we can mix it in, which
