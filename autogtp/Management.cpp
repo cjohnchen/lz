@@ -309,7 +309,7 @@ Order Management::getWorkInternal(bool tuning) {
     prog_cmdline.append(" -s -J");
     prog_cmdline.append(" http://zero.sjeng.org/get-task/");
     if (tuning || selfPlayOnly) {
-        prog_cmdline.append("0");
+        prog_cmdline.append("0/0.15");
     } else {
         prog_cmdline.append(QString::number(AUTOGTP_VERSION));
     }
