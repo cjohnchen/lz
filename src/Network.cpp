@@ -892,6 +892,7 @@ Network::Netresult Network::get_scored_moves(
         for (auto sym = 0; sym < 8; ++sym) {
             auto tmpresult = get_scored_moves_internal(state, sym);
             result.winrate += tmpresult.winrate / 8.0f;
+            result.opp_winrate += tmpresult.opp_winrate / 8.0f;
             result.policy_pass += tmpresult.policy_pass / 8.0f;
 
             for (auto idx = size_t{0}; idx < BOARD_SQUARES; idx++) {
@@ -905,10 +906,12 @@ Network::Netresult Network::get_scored_moves(
         result = get_scored_moves_internal(state, rand_sym);
     }
 
-    // v2 format (ELF Open Go) returns black value, not stm
+    // v2 format (ELF Open Go) returns black value, not side-to-move
     if (value_head_not_stm) {
         if (state->board.get_to_move() == FastBoard::WHITE) {
-            result.winrate = 1.0f - result.winrate;
+            auto temp_winrate = result.winrate;
+            result.winrate = result.opp_winrate;
+            result.opp_winrate = temp_winrate;
         }
     }
 
@@ -972,6 +975,7 @@ Network::Netresult Network::get_scored_moves_internal(
 
     // Sigmoid: tanh normalized to take value in (0,1)
     const auto winrate_sig = 1.0f / (1.0f + std::exp(-2.0f * winrate_out[0]));
+    const auto opp_winrate_sig = 1.0f / (1.0f + std::exp(2.0f * winrate_out[0]));
 
     Netresult result;
 
@@ -982,6 +986,7 @@ Network::Netresult Network::get_scored_moves_internal(
 
     result.policy_pass = outputs[BOARD_SQUARES];
     result.winrate = winrate_sig;
+    result.opp_winrate = opp_winrate_sig;
 
     return result;
 }
