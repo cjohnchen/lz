@@ -110,8 +110,8 @@ private:
     // UCT eval
     float m_score;
     // Original net eval for this node (not children).
-    float m_net_eval{0.0f};
-    float m_net_opp_eval{0.0f};
+    float m_net_blackeval{0.0f};
+    float m_net_whiteeval{0.0f};
     std::atomic<double> m_blackevals{0.0};
     std::atomic<double> m_whiteevals{0.0};
     std::atomic<Status> m_status{ACTIVE};
