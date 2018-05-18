@@ -907,13 +907,14 @@ Network::Netresult Network::get_scored_moves(
     }
 
     // v2 format (ELF Open Go) returns black value, not side-to-move
-    if (value_head_not_stm) {
+    if (!value_head_not_stm) {
         if (state->board.get_to_move() == FastBoard::WHITE) {
             auto temp_winrate = result.winrate;
             result.winrate = result.opp_winrate;
             result.opp_winrate = temp_winrate;
         }
     }
+    // now winrate is black value and opp_winrate is white value
 
     // Insert result into cache.
     NNCache::get_NNCache().insert(state->board.get_hash(), result);
