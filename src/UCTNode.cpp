@@ -285,8 +285,6 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
         auto psa = child.get_score();
         if (child.get_visits() > 0) {
             winrate = child.get_eval(color);
-        } else {
-            update_tvp(psa);
         }
         auto denom = 1.0 + child.get_visits();
         auto puct = cfg_puct * psa * (numerator / denom);
@@ -301,6 +299,9 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
 
     assert(best != nullptr);
     best->inflate();
+    if (best->get_visits() == 0) {
+        update_tvp(best->get_score());
+    }
     return best->get();
 }
 
