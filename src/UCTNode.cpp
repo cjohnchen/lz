@@ -184,6 +184,10 @@ void UCTNode::update(float eval) {
     accumulate_eval(eval);
 }
 
+void UCTNode::update_tvp(float psa) {
+    atomic_add(m_tvp,double(psa));
+}
+
 bool UCTNode::has_children() const {
     return m_min_psa_ratio_children <= 1.0f;
 }
@@ -252,18 +256,8 @@ void UCTNode::accumulate_eval(float eval) {
 UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
     LOCK(get_mutex(), lock);
 
-    // Count parentvisits manually to avoid issues with transpositions.
-    auto total_visited_policy = 0.0f;
-    auto parentvisits = size_t{0};
-    for (const auto& child : m_children) {
-        if (child.valid()) {
-            parentvisits += child.get_visits();
-            if (child.get_visits() > 0) {
-                total_visited_policy += child.get_score();
-            }
-        }
-    }
-
+    auto total_visited_policy = get_tvp();
+    auto parentvisits = get_visits();
     auto numerator = std::sqrt(double(parentvisits));
     auto fpu_reduction = 0.0f;
     // Lower the expected eval for moves that are likely not the best.
@@ -284,10 +278,12 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
         }
 
         auto winrate = fpu_eval;
+        auto psa = child.get_score();
         if (child.get_visits() > 0) {
             winrate = child.get_eval(color);
+        } else {
+            update_tvp(psa);
         }
-        auto psa = child.get_score();
         auto denom = 1.0 + child.get_visits();
         auto puct = cfg_puct * psa * (numerator / denom);
         auto value = winrate + puct;
