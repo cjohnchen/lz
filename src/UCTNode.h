@@ -68,9 +68,11 @@ public:
     float get_eval(int tomove) const;
     float get_pure_eval(int tomove) const;
     float get_net_eval(int tomove) const;
+    double get_tvp() const; // total_visited_policy
     void virtual_loss(void);
     void virtual_loss_undo(void);
     void update(float eval);
+    void update_tvp(float psa);
 
     // Defined in UCTNodeRoot.cpp, only to be called on m_root in UCTSearch
     void randomize_first_proportionally();
@@ -111,6 +113,7 @@ private:
     // Original net eval for this node (not children).
     float m_net_eval{0.0f};
     std::atomic<double> m_blackevals{0.0};
+    std::atomic<double> m_tvp{0.0};
     std::atomic<Status> m_status{ACTIVE};
     // Is someone adding scores to this node?
     bool m_is_expanding{false};
