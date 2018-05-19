@@ -299,9 +299,6 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
 
     assert(best != nullptr);
     best->inflate();
-    if (best->get_visits() == 0) {
-        update_tvp(best->get_score());
-    }
     return best->get();
 }
 
