@@ -282,10 +282,10 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
         }
 
         auto winrate = fpu_eval;
-        auto psa = child.get_score();
         if (child.get_visits() > 0) {
             winrate = child.get_eval(color);
         }
+        auto psa = child.get_score();
         auto denom = 1.0 + child.get_visits();
         auto puct = cfg_puct * psa * (numerator / denom);
         auto value = winrate + puct;
