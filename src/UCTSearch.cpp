@@ -182,15 +182,15 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
 
     if (node->has_children() && !result.valid()) {
         auto next = node->uct_select_child(color, node == m_root.get());
+        if (next->get_visits() == 0) {
+            node->update_tvp(next->get_score());
+        }
+        
         auto move = next->get_move();
-
         currstate.play_move(move);
         if (move != FastBoard::PASS && currstate.superko()) {
             next->invalidate();
         } else {
-            if (next->get_visits() == 0) {
-                node->update_tvp(next->get_score());
-            }
             result = play_simulation(currstate, next);
         }
     }
