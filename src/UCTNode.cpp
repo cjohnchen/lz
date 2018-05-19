@@ -253,6 +253,10 @@ void UCTNode::accumulate_eval(float eval) {
     atomic_add(m_blackevals, double(eval));
 }
 
+double UCTNode::get_tvp() const {
+    return m_tvp;
+}
+
 UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
     LOCK(get_mutex(), lock);
 
