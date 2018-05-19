@@ -188,6 +188,9 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
         if (move != FastBoard::PASS && currstate.superko()) {
             next->invalidate();
         } else {
+            if (next->get_visits() == 0) {
+                node->update_tvp(next->get_score());
+            }
             result = play_simulation(currstate, next);
         }
     }
