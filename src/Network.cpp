@@ -1012,7 +1012,7 @@ void Network::show_heatmap(const FastState* const state,
     }
     const auto pass_score = int(result.policy_pass * 1000);
     myprintf("pass: %d\n", pass_score);
-    myprintf("winrate: %f\n", result.winrate);
+    myprintf("winrate: %e\n", result.winrate);
 
     if (topmoves) {
         std::vector<Network::ScoreVertexPair> moves;
