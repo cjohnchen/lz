@@ -188,7 +188,7 @@ static void parse_commandline(int argc, char *argv[]) {
 		cfg_backup_pct = vm["backup-pct"].as<float>();
 		if (cfg_backup_pct > 100.0) {
 			cfg_backup_pct = 90.0;
-			myprintf("Invalid backup percentage. Falling back to 90.0.\n")
+			myprintf("Invalid backup percentage. Falling back to 90.0.\n");
 		}
 	}
 	if (vm.count("backup-type")) {
