@@ -273,9 +273,9 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
     auto pure_eval = get_pure_eval(color); 
     if (!is_root || !cfg_noise) {
         fpu_reduction = cfg_fpu_reduction * std::sqrt(total_visited_policy);
-        if (cfg_puct_factor = 2) {
+        if (cfg_puct_factor == 2) {
             fpu_reduction *= pure_eval * (1 - pure_eval) / 0.25;
-        } else if (cfg_puct_factor = 1) {
+        } else if (cfg_puct_factor == 1) {
             fpu_reduction *= pure_eval / 0.5;
         }
     }
