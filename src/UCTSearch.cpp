@@ -200,6 +200,9 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
         if (move != FastBoard::PASS && currstate.superko()) {
             next->invalidate();
         } else {
+	    if (backup_pct > 100.0) {
+		    backup_pct = calc_backup_pct(node->get_pure_eval(FastBoard::BLACK));
+	    }
             result = play_simulation(currstate, next, backup_pct);
         }
     }
@@ -610,7 +613,7 @@ bool UCTSearch::stop_thinking(int elapsed_centis, int time_for_move) const {
 void UCTWorker::operator()() {
     do {
         auto currstate = std::make_unique<GameState>(m_rootstate);
-        auto result = m_search->play_simulation(*currstate, m_root, calc_backup_pct(m_root->get_pure_eval(FastBoard::BLACK)));
+        auto result = m_search->play_simulation(*currstate, m_root, 200.0);
         if (result.valid()) {
             m_search->increment_playouts();
         }
@@ -655,7 +658,7 @@ int UCTSearch::think(int color, passflag_t passflag) {
     do {
         auto currstate = std::make_unique<GameState>(m_rootstate);
 
-        auto result = play_simulation(*currstate, m_root.get(), calc_backup_pct(m_root->get_pure_eval(FastBoard::BLACK)));
+        auto result = play_simulation(*currstate, m_root.get(), 200.0);
         if (result.valid()) {
             increment_playouts();
         }
@@ -731,7 +734,7 @@ void UCTSearch::ponder() {
     auto last_output = 0;
     do {
         auto currstate = std::make_unique<GameState>(m_rootstate);
-        auto result = play_simulation(*currstate, m_root.get(), calc_backup_pct(m_root->get_pure_eval(FastBoard::BLACK)));
+        auto result = play_simulation(*currstate, m_root.get(), 200.0);
         if (result.valid()) {
             increment_playouts();
         }
