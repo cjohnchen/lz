@@ -78,19 +78,19 @@ static void parse_commandline(int argc, char *argv[]) {
         ("benchmark", "Test network and exit. Default args:\n-v3200 --noponder "
                       "-m0 -t1 -s1.")
         
-		("puct-factor,f", po::value<int>()->default_value(cfg_puct_factor),
-			           "0: original (=1), 1: linear (=winrate*2), 2: quadratic (=winrate(1-winrate)*4, default).")
-		("backup-pct", po::value<float>()->default_value(cfg_backup_pct),
-			           "Update (backup) Q-values (winrates) of white's moves that are\n"
-					   "ancestors of the leaf node with a probability determined by winrate\n"
-					   "at root node and this parameter.\n"
-			           "At most 100, defaulted to 90.\n"
-			           "The lower the value, the weaker you assume white to be.")
-		("backup-type", po::value<int>()->default_value(cfg_backup_type),
-		               "0: throw a dice to go up a generation (default),\n"
-					   "1: always update, 2: never update,\n"
-					   "3: throw dice once for each simulation\n"
-					   "4: throw dice once for each ancestor.")
+	("puct-factor", po::value<int>()->default_value(cfg_puct_factor),
+	              "0: original (=1), 1: linear (=winrate*2), 2: quadratic (=winrate(1-winrate)*4, default).")
+	("backup-pct", po::value<float>()->default_value(cfg_backup_pct),
+		      "Update (backup) Q-values (winrates) of white's moves that are\n"
+		      "ancestors of the leaf node with a probability determined by winrate\n"
+		      "at root node and this parameter.\n"
+		      "At most 100, defaulted to 90.\n"
+		      "The lower the value, the weaker you assume white to be.")
+	("backup-type", po::value<int>()->default_value(cfg_backup_type),
+		      "0: throw a dice to go up a generation (default),\n"
+	              "1: always update, 2: never update,\n"
+	              "3: throw dice once for each simulation\n"
+	              "4: throw dice once for each ancestor.")
         ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("GPU options");
