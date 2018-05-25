@@ -170,7 +170,8 @@ float calc_backup_pct (float blackeval) {
 
 SearchResult UCTSearch::play_simulation(GameState & currstate,
                                         UCTNode* const node,
-                                        float backup_pct) {
+                                        float backup_pct,
+				        int depth) {
     const auto color = currstate.get_to_move();
     auto result = SearchResult{};
 
@@ -192,6 +193,9 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
             }
         }
     }
+	if (result.valid()) {
+		result.remaining_backups = - depth * (1.0 - backup_pct / 100.0);
+	}
 
     if (node->has_children() && !result.valid()) {
         auto next = node->uct_select_child(color, node == m_root.get());
@@ -201,25 +205,46 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
         if (move != FastBoard::PASS && currstate.superko()) {
             next->invalidate();
         } else {
-	    if (backup_pct > 100.0) {
-		    backup_pct = calc_backup_pct(node->get_pure_eval(FastBoard::BLACK));
-	    }
-            result = play_simulation(currstate, next, backup_pct);
+            if (backup_pct > 100.0) {
+                backup_pct = calc_backup_pct(node->get_pure_eval(FastBoard::BLACK));
+            }
+            result = play_simulation(currstate, next, backup_pct, depth + 1);
+            result.remaining_backups++;
             if (result.valid()) {
-		    if (color == FastBoard::BLACK || result.backup_type == 1 || node->get_visits() == 0) {
-			    node->update(result.eval());
-		    } else {
-			    if (std::uniform_real_distribution<double>{ 0.0, 100.0 }(Random::get_Rng()) <= backup_pct && result.backup_type != 2) {
-				    node->update(result.eval());
-				    if (result.backup_type == 3) {
-					    result.backup_type = 1;
-				    }
-			    } else if (result.backup_type ==0 || result.backup_type == 3) {
-				    result.backup_type = 2;
-			    }
-		    }
-	    }
-	}
+                if (color == FastBoard::BLACK || result.backup_type == 1 || node->get_visits() == 0) {
+                    node->update(result.eval());
+                }
+                else if (result.backup_type == 2) {
+                    if (cfg_pseudo_backup) {
+                        node->update(node->get_pure_eval(FastBoard::BLACK));
+                    }
+                }
+                else if (result.backup_type == 5) {
+                    if (std::uniform_real_distribution<double>{ 0.0, 1.0 }(Random::get_Rng()) <= result.remaining_backups) {
+                        node->update(result.eval());
+                    }
+                    else {
+                        if (cfg_pseudo_backup) {
+                            node->update(node->get_pure_eval(FastBoard::BLACK));
+                        }
+                    }
+                }
+                else if (std::uniform_real_distribution<double>{ 0.0, 100.0 }(Random::get_Rng()) <= backup_pct) {
+                    node->update(result.eval());
+                    if (result.backup_type == 3) {
+                        result.backup_type = 1;
+                    }
+                }
+                else {
+                    if (cfg_pseudo_backup) {
+                        node->update(node->get_pure_eval(FastBoard::BLACK));
+                    }
+                    if (result.backup_type == 0 || result.backup_type == 3) {
+                        result.backup_type = 2;
+                    }
+                }
+            }
+        }
     }
 
     node->virtual_loss_undo();
@@ -613,7 +638,7 @@ bool UCTSearch::stop_thinking(int elapsed_centis, int time_for_move) const {
 void UCTWorker::operator()() {
     do {
         auto currstate = std::make_unique<GameState>(m_rootstate);
-        auto result = m_search->play_simulation(*currstate, m_root, 200.0);
+        auto result = m_search->play_simulation(*currstate, m_root, 200.0, 0);
         if (result.valid()) {
             m_search->increment_playouts();
         }
@@ -658,7 +683,7 @@ int UCTSearch::think(int color, passflag_t passflag) {
     do {
         auto currstate = std::make_unique<GameState>(m_rootstate);
 
-        auto result = play_simulation(*currstate, m_root.get(), 200.0);
+        auto result = play_simulation(*currstate, m_root.get(), 200.0, 0);
         if (result.valid()) {
             increment_playouts();
         }
@@ -734,7 +759,7 @@ void UCTSearch::ponder() {
     auto last_output = 0;
     do {
         auto currstate = std::make_unique<GameState>(m_rootstate);
-        auto result = play_simulation(*currstate, m_root.get(), 200.0);
+        auto result = play_simulation(*currstate, m_root.get(), 200.0, 0);
         if (result.valid()) {
             increment_playouts();
         }
