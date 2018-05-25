@@ -118,13 +118,13 @@ static void parse_commandline(int argc, char *argv[]) {
             po::value<float>()->default_value(cfg_random_temp),
             "Temperature to use for random move selection.")
         ;
-#ifdef USE_TUNER
     po::options_description tuner_desc("Tuning options");
     tuner_desc.add_options()
         ("puct", po::value<float>())
         ("softmax_temp", po::value<float>())
         ("fpu_reduction", po::value<float>())
         ;
+#ifdef USE_TUNER
 #endif
     // These won't be shown, we use them to catch incorrect usage of the
     // command line.
@@ -189,14 +189,20 @@ static void parse_commandline(int argc, char *argv[]) {
     if (vm.count("backup-pct")) {
 	    cfg_backup_pct = vm["backup-pct"].as<float>();
 	    if (cfg_backup_pct > 100.0) {
-		    cfg_backup_pct = 90.0;
-		    myprintf("Invalid backup percentage. Falling back to 90.0.\n");
+		    cfg_backup_pct = 50.0;
+		    myprintf("Invalid backup percentage. Falling back to 50.0.\n");
 	    }
     }
     if (vm.count("backup-type")) {
 	    cfg_backup_type = vm["backup-type"].as<int>();
     }
-#ifdef USE_TUNER
+    if (vm.count("pseudo-backup")) {
+        auto pb = vm["pseudo-backup"].as<std::string>();
+        if (pb == "off") {
+            cfg_pseudo_backup = false;
+        }
+    }
+	
     if (vm.count("puct")) {
         cfg_puct = vm["puct"].as<float>();
     }
@@ -206,6 +212,7 @@ static void parse_commandline(int argc, char *argv[]) {
     if (vm.count("fpu_reduction")) {
         cfg_fpu_reduction = vm["fpu_reduction"].as<float>();
     }
+#ifdef USE_TUNER
 #endif
 
     if (vm.count("logfile")) {
