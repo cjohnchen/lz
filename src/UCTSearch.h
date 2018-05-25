@@ -33,6 +33,7 @@
 #include "UCTNode.h"
 
 extern int cfg_backup_type;
+extern bool cfg_pseudo_backup;
 
 class SearchResult {
 public:
@@ -100,7 +101,7 @@ public:
     void ponder();
     bool is_running() const;
     void increment_playouts();
-    SearchResult play_simulation(GameState& currstate, UCTNode* const node, float backup_pct);
+    SearchResult play_simulation(GameState& currstate, UCTNode* const node, float backup_pct, int depth);
 
 private:
     float get_min_psa_ratio() const;

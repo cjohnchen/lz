@@ -78,18 +78,21 @@ static void parse_commandline(int argc, char *argv[]) {
         ("benchmark", "Test network and exit. Default args:\n-v3200 --noponder "
                       "-m0 -t1 -s1.")
         
-	("puct-factor", po::value<int>()->default_value(cfg_puct_factor),
-	              "0: original (=1), 1: linear (=winrate*2), 2: quadratic (=winrate(1-winrate)*4, default).")
-	("backup-pct", po::value<float>()->default_value(cfg_backup_pct),
-		      "Update (backup) Q-values (winrates) of white's moves that are ancestors of the leaf node "
-		      "with a probability determined by winrate at root node and this parameter.\n"
-		      "At most 100, defaulted to 90.\n"
-		      "The lower the value, the weaker you assume white to be.")
-	("backup-type", po::value<int>()->default_value(cfg_backup_type),
-		      "0: throw a dice to go up a generation (default),\n"
-	              "1: always update, 2: never update,\n"
-	              "3: throw dice once for each simulation\n"
-	              "4: throw dice once for each ancestor.")
+        ("puct-factor", po::value<int>()->default_value(cfg_puct_factor),
+                      "0: original (=1), 1: linear (=winrate*2, default), 2: quadratic (=winrate(1-winrate)*4).")
+        ("backup-pct", po::value<float>()->default_value(cfg_backup_pct),
+                      "Update (backup) Q-values (winrates) of white's moves that are ancestors of the new leaf node "
+                      "with a probability determined by winrate at root node and this parameter.\n"
+                      "At most 100, defaulted to 50.\n"
+                      "The lower the value, the weaker you assume white to be.")
+        ("backup-type", po::value<int>()->default_value(cfg_backup_type),
+                      "0: throw a dice to go up a generation,\n"
+                      "1: always update, 2: never update,\n"
+                      "3: throw dice once for each simulation,\n"
+                      "4: throw dice once for each ancestor,\n"
+                      "5: update the foremost ancestors only (default).")
+        ("pseudo-backup", po::value<std::string>()->default_value("on"),
+                      "[on|off] Whether to increment visit count when value is not actually updated.")
         ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("GPU options");
@@ -115,13 +118,13 @@ static void parse_commandline(int argc, char *argv[]) {
             po::value<float>()->default_value(cfg_random_temp),
             "Temperature to use for random move selection.")
         ;
-#ifdef USE_TUNER
     po::options_description tuner_desc("Tuning options");
     tuner_desc.add_options()
         ("puct", po::value<float>())
         ("softmax_temp", po::value<float>())
         ("fpu_reduction", po::value<float>())
         ;
+#ifdef USE_TUNER
 #endif
     // These won't be shown, we use them to catch incorrect usage of the
     // command line.
@@ -186,14 +189,20 @@ static void parse_commandline(int argc, char *argv[]) {
     if (vm.count("backup-pct")) {
 	    cfg_backup_pct = vm["backup-pct"].as<float>();
 	    if (cfg_backup_pct > 100.0) {
-		    cfg_backup_pct = 90.0;
-		    myprintf("Invalid backup percentage. Falling back to 90.0.\n");
+		    cfg_backup_pct = 50.0;
+		    myprintf("Invalid backup percentage. Falling back to 50.0.\n");
 	    }
     }
     if (vm.count("backup-type")) {
 	    cfg_backup_type = vm["backup-type"].as<int>();
     }
-#ifdef USE_TUNER
+    if (vm.count("pseudo-backup")) {
+        auto pb = vm["pseudo-backup"].as<std::string>();
+        if (pb == "off") {
+            cfg_pseudo_backup = false;
+        }
+    }
+	
     if (vm.count("puct")) {
         cfg_puct = vm["puct"].as<float>();
     }
@@ -203,6 +212,7 @@ static void parse_commandline(int argc, char *argv[]) {
     if (vm.count("fpu_reduction")) {
         cfg_fpu_reduction = vm["fpu_reduction"].as<float>();
     }
+#ifdef USE_TUNER
 #endif
 
     if (vm.count("logfile")) {
