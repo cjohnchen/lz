@@ -38,6 +38,7 @@ extern bool cfg_pseudo_backup;
 class SearchResult {
 public:
     int backup_type;
+    float remaining_backups{0.0};
     SearchResult() = default;
     bool valid() const { return m_valid;  }
     float eval() const { return m_eval;  }
