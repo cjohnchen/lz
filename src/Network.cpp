@@ -905,13 +905,6 @@ Network::Netresult Network::get_scored_moves(
         result = get_scored_moves_internal(state, rand_sym);
     }
 
-    // v2 format (ELF Open Go) returns black value, not stm
-    if (value_head_not_stm) {
-        if (state->board.get_to_move() == FastBoard::WHITE) {
-            result.winrate = 1.0f - result.winrate;
-        }
-    }
-
     // Insert result into cache.
     NNCache::get_NNCache().insert(state->board.get_hash(), result);
 
@@ -972,6 +965,7 @@ Network::Netresult Network::get_scored_moves_internal(
 
     // Sigmoid: tanh normalized to take value in (0,1)
     const auto winrate_sig = 1.0f / (1.0f + std::exp(-2.0f * winrate_out[0]));
+    const auto opp_winrate_sig = 1.0f / (1.0f + std::exp(2.0f * winrate_out[0]));
 
     Netresult result;
 
@@ -981,7 +975,15 @@ Network::Netresult Network::get_scored_moves_internal(
     }
 
     result.policy_pass = outputs[BOARD_SQUARES];
-    result.winrate = winrate_sig;
+    
+    // v1 format (Leela Zero native) returns side-to-move value, not black or white
+    if (value_head_not_stm || state->board.get_to_move() == FastBoard::BLACK) {
+		result.black_winrate = winrate_sig;
+		result.white_winrate = opp_winrate_sig;
+	} else {
+		result.black_winrate = opp_winrate_sig;
+		result.white_winrate = winrate_sig;
+	}
 
     return result;
 }
@@ -1012,7 +1014,8 @@ void Network::show_heatmap(const FastState* const state,
     }
     const auto pass_score = int(result.policy_pass * 1000);
     myprintf("pass: %d\n", pass_score);
-    myprintf("winrate: %f\n", result.winrate);
+    myprintf("black winrate: %e\n", result.black_winrate);
+    myprintf("white winrate: %e\n", result.white_winrate);
 
     if (topmoves) {
         std::vector<Network::ScoreVertexPair> moves;
