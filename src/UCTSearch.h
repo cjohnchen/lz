@@ -38,27 +38,29 @@ extern bool cfg_pseudo_backup;
 class SearchResult {
 public:
     int backup_type;
-    float remaining_backups{0.0};
+    float remaining_backups;
     SearchResult() = default;
     bool valid() const { return m_valid;  }
-    float eval() const { return m_eval;  }
-    static SearchResult from_eval(float eval) {
-        return SearchResult(eval);
-    }
+    float blackeval() const { return m_blackeval; }
+	float whiteeval() const { return m_whiteeval; }
+    static SearchResult from_eval(float blackeval, float whiteeval) {
+        return SearchResult(blackeval, whiteeval);
+	}
     static SearchResult from_score(float board_score) {
         if (board_score > 0.0f) {
-            return SearchResult(1.0f);
+            return SearchResult(1.0f, 0.0f);
         } else if (board_score < 0.0f) {
-            return SearchResult(0.0f);
+            return SearchResult(0.0f, 1.0f);
         } else {
-            return SearchResult(0.5f);
+            return SearchResult(0.5f, 0.5f);
         }
     }
 private:
-    explicit SearchResult(float eval)
-        : m_valid(true), m_eval(eval), backup_type(cfg_backup_type) {}
+    explicit SearchResult(float blackeval, float whiteeval)
+        : m_valid(true), m_blackeval(blackeval), m_whiteeval(whiteeval), backup_type(cfg_backup_type), remaining_backups(0.0f) {}
     bool m_valid{false};
-    float m_eval{0.0f};
+    float m_blackeval{0.0f};
+	float m_whiteeval{0.0f};
 };
 
 namespace TimeManagement {
