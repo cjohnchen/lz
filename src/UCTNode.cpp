@@ -53,7 +53,8 @@ SMP::Mutex& UCTNode::get_mutex() {
 
 bool UCTNode::create_children(std::atomic<int>& nodecount,
                               GameState& state,
-                              float& eval,
+                              float& blackeval,
+                              float& whiteeval,
                               float min_psa_ratio) {
     // check whether somebody beat us to it (atomic)
     if (!expandable(min_psa_ratio)) {
@@ -80,15 +81,9 @@ bool UCTNode::create_children(std::atomic<int>& nodecount,
     const auto raw_netlist = Network::get_scored_moves(
         &state, Network::Ensemble::RANDOM_SYMMETRY);
 
-    // DCNN returns winrate as side to move
-    m_net_eval = raw_netlist.winrate;
-    const auto to_move = state.board.get_to_move();
-    // our search functions evaluate from black's point of view
-    if (state.board.white_to_move()) {
-        m_net_eval = 1.0f - m_net_eval;
-    }
-    update(m_net_eval);
-    eval = m_net_eval;
+    blackeval = m_net_blackeval = raw_netlist.black_winrate;
+    whiteeval = m_net_whiteeval = raw_netlist.white_winrate;
+    update(blackeval, whiteeval);
 
     std::vector<Network::ScoreVertexPair> nodelist;
 
@@ -180,9 +175,9 @@ void UCTNode::virtual_loss_undo() {
     m_virtual_loss -= VIRTUAL_LOSS_COUNT;
 }
 
-void UCTNode::update(float eval) {
+void UCTNode::update(float blackeval, float whiteeval) {
     m_visits++;
-    accumulate_eval(eval);
+    accumulate_eval(blackeval, whiteeval);
 }
 
 bool UCTNode::has_children() const {
@@ -209,12 +204,14 @@ int UCTNode::get_visits() const {
 float UCTNode::get_pure_eval(int tomove) const {
     auto visits = get_visits();
     assert(visits > 0);
-    auto blackeval = get_blackevals();
-    auto score = static_cast<float>(blackeval / double(visits));
-    if (tomove == FastBoard::WHITE) {
-        score = 1.0f - score;
+    if (tomove == FastBoard::BLACK) {
+        auto blackeval = get_blackevals();
+        return static_cast<float>(blackeval / double(visits));
     }
-    return score;
+    if (tomove == FastBoard::WHITE) {
+        auto whiteeval = get_whiteevals();
+        return static_cast<float>(whiteeval / double(visits));
+    }
 }
 
 float UCTNode::get_eval(int tomove) const {
@@ -225,29 +222,42 @@ float UCTNode::get_eval(int tomove) const {
     auto visits = get_visits() + virtual_loss;
     assert(visits > 0);
     auto blackeval = get_blackevals();
-    if (tomove == FastBoard::WHITE) {
-        blackeval += static_cast<double>(virtual_loss);
+    auto whiteeval = get_whiteevals();
+    if (noflip) {
+        if (tomove == FastBoard::BLACK) {
+            return static_cast<float>(blackeval / double(visits));
+        } else {
+            return static_cast<float>(whiteeval / double(visits));
+        }
+    } else {
+        if (tomove == FastBoard::BLACK) {
+            return static_cast<float>(-(whiteeval + static_cast<double>(virtual_loss)) / double(visits));
+        } else {
+            return static_cast<float>(-(blackeval + static_cast<double>(virtual_loss)) / double(visits));
+        }
     }
-    auto score = static_cast<float>(blackeval / double(visits));
-    if (tomove == FastBoard::WHITE) {
-        score = 1.0f - score;
-    }
-    return score;
 }
 
 float UCTNode::get_net_eval(int tomove) const {
-    if (tomove == FastBoard::WHITE) {
-        return 1.0f - m_net_eval;
+    if (tomove == FastBoard::BLACK) {
+        return m_net_blackeval;
     }
-    return m_net_eval;
+    if (tomove == FastBoard::WHITE) {
+        return m_net_whiteeval;
+    }
 }
 
 double UCTNode::get_blackevals() const {
     return m_blackevals;
 }
 
-void UCTNode::accumulate_eval(float eval) {
-    atomic_add(m_blackevals, double(eval));
+double UCTNode::get_whiteevals() const {
+    return m_whiteevals;
+}
+
+void UCTNode::accumulate_eval(float blackeval, float whiteeval) {
+    atomic_add(m_blackevals, double(blackeval));
+    atomic_add(m_whiteevals, double(whiteeval));
 }
 
 UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
@@ -271,17 +281,26 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
     // Do not do this if we have introduced noise at this node exactly
     // to explore more.
     
-    auto pure_eval = get_pure_eval(color); 
+    auto parent_eval = get_pure_eval(color);
+    auto opp_parent_eval = get_pure_eval(1 - color);
     if (!is_root || !cfg_noise) {
         fpu_reduction = cfg_fpu_reduction * std::sqrt(total_visited_policy);
         if (cfg_puct_factor == 2) {
-            fpu_reduction *= pure_eval * (1 - pure_eval) / 0.25;
-        } else if (cfg_puct_factor == 1) {
-            fpu_reduction *= pure_eval / 0.5;
+            if (parent_eval < 0.5) {
+                fpu_reduction *= parent_eval * (1 - parent_eval) / 0.25;
+            } else {
+                fpu_reduction *= opp_parent_eval * (1 - opp_parent_eval) / 0.25;
+            }
+        } else if (cfg_puct_factor == 1 || (cfg_puct_factor == 3 && parent_eval < 0.5)) {
+            fpu_reduction *= parent_eval / 0.5;
         }
     }
     // Estimated eval for unknown nodes = current parent winrate - reduction
-    auto fpu_eval = pure_eval - fpu_reduction;
+    if (parent_eval < 0.5) {
+        auto fpu_eval = parent_eval - fpu_reduction;
+    } else {
+        auto fpu_eval = - opp_parent_eval - fpu_reduction;
+    }
 
     auto best = static_cast<UCTNodePointer*>(nullptr);
     auto best_value = std::numeric_limits<double>::lowest();
@@ -293,15 +312,19 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
 
         auto winrate = fpu_eval;
         if (child.get_visits() > 0) {
-            winrate = child.get_eval(color);
+            winrate = child.get_eval(color, parent_eval < 0.5);
         }
         auto psa = child.get_score();
         auto denom = 1.0 + child.get_visits();
         auto puct = cfg_puct * psa * (numerator / denom);
         if (cfg_puct_factor == 2) {
-            puct *= pure_eval * (1 - pure_eval) / 0.25;
-        } else if (cfg_puct_factor == 1) {
-            puct *= pure_eval / 0.5;
+            if (parent_eval < 0.5) {
+                puct *= parent_eval * (1 - parent_eval) / 0.25;
+            } else {
+                puct *= opp_parent_eval * (1 - opp_parent_eval) / 0.25;
+            }
+        } else if (cfg_puct_factor == 1 || (cfg_puct_factor == 3 && parent_eval < 0.5)) {
+            puct *= parent_eval / 0.5;
         }
         auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
@@ -334,7 +357,7 @@ public:
         }
 
         // both have same non-zero number of visits
-        return a.get_eval(m_color) < b.get_eval(m_color);
+        return a.get_pure_eval(m_color) < b.get_pure_eval(m_color) || a.get_pure_eval(1-m_color) > b.get_pure_eval(1-m_color);
     }
 private:
     int m_color;
