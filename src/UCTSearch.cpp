@@ -159,10 +159,10 @@ float UCTSearch::get_min_psa_ratio() const {
     return 0.0f;
 }
 
-float calc_backup_pct (float blackeval) {
+float calc_backup_pct (float whiteeval) {
 	// dynamically adjust backup_pct according to root winrate
-	if (blackeval > 0.5) {
-		return (100.0 - cfg_backup_pct) * 4.0 * blackeval * (1 - blackeval) + cfg_backup_pct;
+	if (whiteeval < 0.5) {
+		return (100.0 - cfg_backup_pct) * 4.0 * whiteeval * (1 - whiteeval) + cfg_backup_pct;
 	} else {
 		return 100.0;
 	}
@@ -181,21 +181,21 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
         if (currstate.get_passes() >= 2) {
             auto score = currstate.final_score();
             result = SearchResult::from_score(score);
-            node->update(result.eval());
+            node->update(result.blackeval(), result.whiteeval());
         } else if (m_nodes < MAX_TREE_SIZE) {
-            float eval;
+            float blackeval, whiteeval;
             const auto had_children = node->has_children();
             const auto success =
-                node->create_children(m_nodes, currstate, eval,
+                node->create_children(m_nodes, currstate, blackeval, whiteeval,
                                       get_min_psa_ratio());
             if (!had_children && success) {
-                result = SearchResult::from_eval(eval);
+                result = SearchResult::from_eval(blackeval, whiteeval);
             }
         }
     }
-	if (result.valid()) {
-		result.remaining_backups = - depth * (1.0 - backup_pct / 100.0);
-	}
+    if (result.valid()) {
+        result.remaining_backups = - depth * (1.0 - backup_pct / 100.0);
+    }
 
     if (node->has_children() && !result.valid()) {
         auto next = node->uct_select_child(color, node == m_root.get());
@@ -206,38 +206,38 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
             next->invalidate();
         } else {
             if (backup_pct > 100.0) {
-                backup_pct = calc_backup_pct(node->get_pure_eval(FastBoard::BLACK));
+                backup_pct = calc_backup_pct(node->get_pure_eval(FastBoard::WHITE));
             }
             result = play_simulation(currstate, next, backup_pct, depth + 1);
             result.remaining_backups++;
             if (result.valid()) {
                 if (color == FastBoard::BLACK || result.backup_type == 1 || node->get_visits() == 0) {
-                    node->update(result.eval());
+                    node->update(result.blackeval(), result.whiteeval());
                 }
                 else if (result.backup_type == 2) {
                     if (cfg_pseudo_backup) {
-                        node->update(node->get_pure_eval(FastBoard::BLACK));
+                        node->update(node->get_pure_eval(FastBoard::BLACK), node->get_pure_eval(FastBoard::WHITE));
                     }
                 }
                 else if (result.backup_type == 5) {
                     if (std::uniform_real_distribution<double>{ 0.0, 1.0 }(Random::get_Rng()) <= result.remaining_backups) {
-                        node->update(result.eval());
+                        node->update(result.blackeval(), result.whiteeval());
                     }
                     else {
                         if (cfg_pseudo_backup) {
-                            node->update(node->get_pure_eval(FastBoard::BLACK));
+                            node->update(node->get_pure_eval(FastBoard::BLACK), node->get_pure_eval(FastBoard::WHITE));
                         }
                     }
                 }
                 else if (std::uniform_real_distribution<double>{ 0.0, 100.0 }(Random::get_Rng()) <= backup_pct) {
-                    node->update(result.eval());
+                    node->update(result.blackeval(), result.whiteeval());
                     if (result.backup_type == 3) {
                         result.backup_type = 1;
                     }
                 }
                 else {
                     if (cfg_pseudo_backup) {
-                        node->update(node->get_pure_eval(FastBoard::BLACK));
+                        node->update(node->get_pure_eval(FastBoard::BLACK), node->get_pure_eval(FastBoard::WHITE));
                     }
                     if (result.backup_type == 0 || result.backup_type == 3) {
                         result.backup_type = 2;
