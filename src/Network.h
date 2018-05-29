@@ -30,6 +30,9 @@
 
 #include "FastState.h"
 #include "GameState.h"
+#include "OpenCLScheduler.h"
+
+class NNCache;
 
 class Network {
 public:
@@ -51,7 +54,7 @@ public:
         Netresult() : policy(BOARD_SQUARES), policy_pass(0.0f), winrate(0.0f) {}
     };
 
-    static Netresult get_scored_moves(const GameState* const state,
+    Netresult get_scored_moves(const GameState* const state,
                                       const Ensemble ensemble,
                                       const int symmetry = -1,
                                       const bool skip_cache = false);
@@ -65,53 +68,90 @@ public:
     static constexpr auto WINOGRAD_ALPHA = 4;
     static constexpr auto WINOGRAD_TILE = WINOGRAD_ALPHA * WINOGRAD_ALPHA;
 
-    static void initialize();
-    static void benchmark(const GameState * const state,
+    void initialize(const std::string &weightsfile);
+    void benchmark(const GameState * const state,
                           const int iterations = 1600);
-    static void show_heatmap(const FastState * const state,
+    void show_heatmap(const FastState * const state,
                              const Netresult & netres, const bool topmoves);
 
-    static std::vector<net_t> gather_features(const GameState* const state,
+    std::vector<net_t> gather_features(const GameState* const state,
                                               const int symmetry);
 private:
-    static std::pair<int, int> load_v1_network(std::istream& wtfile);
-    static std::pair<int, int> load_network_file(const std::string& filename);
-    static void process_bn_var(std::vector<float>& weights,
+    std::pair<int, int> load_v1_network(std::istream& wtfile);
+    std::pair<int, int> load_network_file(const std::string& filename);
+    void process_bn_var(std::vector<float>& weights,
                                const float epsilon = 1e-5f);
 
-    static std::vector<float> winograd_transform_f(const std::vector<float>& f,
+    std::vector<float> winograd_transform_f(const std::vector<float>& f,
         const int outputs, const int channels);
-    static std::vector<float> zeropad_U(const std::vector<float>& U,
+    std::vector<float> zeropad_U(const std::vector<float>& U,
         const int outputs, const int channels,
         const int outputs_pad, const int channels_pad);
-    static void winograd_transform_in(const std::vector<float>& in,
+    void winograd_transform_in(const std::vector<float>& in,
                                       std::vector<float>& V,
                                       const int C);
-    static void winograd_transform_out(const std::vector<float>& M,
+    void winograd_transform_out(const std::vector<float>& M,
                                        std::vector<float>& Y,
                                        const int K);
-    static void winograd_convolve3(const int outputs,
+    void winograd_convolve3(const int outputs,
                                    const std::vector<float>& input,
                                    const std::vector<float>& U,
                                    std::vector<float>& V,
                                    std::vector<float>& M,
                                    std::vector<float>& output);
-    static void winograd_sgemm(const std::vector<float>& U,
+    void winograd_sgemm(const std::vector<float>& U,
                                const std::vector<float>& V,
                                std::vector<float>& M, const int C, const int K);
-    static int get_nn_idx_symmetry(const int vertex, int symmetry);
-    static void fill_input_plane_pair(const FullBoard& board,
+    int get_nn_idx_symmetry(const int vertex, int symmetry);
+    void fill_input_plane_pair(const FullBoard& board,
                                       std::vector<net_t>::iterator black,
                                       std::vector<net_t>::iterator white,
                                       const int symmetry);
-    static Netresult get_scored_moves_internal(const GameState* const state,
+    Netresult get_scored_moves_internal(const GameState* const state,
                                                const int symmetry);
 #if defined(USE_BLAS)
-    static void forward_cpu(const std::vector<float>& input,
+    void forward_cpu(const std::vector<float>& input,
                             std::vector<float>& output_pol,
                             std::vector<float>& output_val);
 
 #endif
+
+    // Input + residual block tower
+    std::vector<std::vector<float>> conv_weights;
+    std::vector<std::vector<float>> conv_biases;
+    std::vector<std::vector<float>> batchnorm_means;
+    std::vector<std::vector<float>> batchnorm_stddivs;
+
+    // Policy head
+    std::vector<float> conv_pol_w;
+    std::vector<float> conv_pol_b;
+    std::array<float, 2> bn_pol_w1;
+    std::array<float, 2> bn_pol_w2;
+
+    std::array<float, (BOARD_SQUARES + 1) * BOARD_SQUARES * 2> ip_pol_w;
+    std::array<float, BOARD_SQUARES + 1> ip_pol_b;
+
+    // Value head
+    std::vector<float> conv_val_w;
+    std::vector<float> conv_val_b;
+    std::array<float, 1> bn_val_w1;
+    std::array<float, 1> bn_val_w2;
+
+    std::array<float, BOARD_SQUARES * 256> ip1_val_w;
+    std::array<float, 256> ip1_val_b;
+
+    std::array<float, 256> ip2_val_w;
+    std::array<float, 1> ip2_val_b;
+    bool value_head_not_stm;
+
+    // Symmetry helper
+    std::array<std::array<int, BOARD_SQUARES>, 8> symmetry_nn_idx_table;
+    OpenCLScheduler opencl;
+    NNCache *nncache;
+
 };
+
+extern Network main_net;
+extern Network aux_net;
 
 #endif

@@ -29,6 +29,8 @@
 
 class NNCache {
 public:
+    NNCache(int size = 150000);  // ~ 225MB
+
     // return the global NNCache
     static NNCache& get_NNCache(void);
 
@@ -53,8 +55,6 @@ public:
     void dump_stats();
 
 private:
-    NNCache(int size = 150000);  // ~ 225MB
-
     std::mutex m_mutex;
 
     size_t m_size;

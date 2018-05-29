@@ -40,6 +40,9 @@
 
 using namespace Utils;
 
+Network main_net;
+Network aux_net;
+
 static void license_blurb() {
     printf(
         "Leela Zero %s  Copyright (C) 2017-2018  Gian-Carlo Pascutto and contributors\n"
@@ -69,6 +72,7 @@ static void parse_commandline(int argc, char *argv[]) {
                         "Resign when winrate is less than x%.\n"
                         "-1 uses 10% but scales for handicap.")
         ("weights,w", po::value<std::string>(), "File with network weights.")
+        ("weights_aux", po::value<std::string>(), "Second network to use for overplays.")
         ("logfile,l", po::value<std::string>(), "File to log input/output to.")
         ("quiet,q", "Disable all diagnostic output.")
         ("timemanage", po::value<std::string>()->default_value("auto"),
@@ -190,6 +194,13 @@ static void parse_commandline(int argc, char *argv[]) {
     } else {
         printf("A network weights file is required to use the program.\n");
         exit(EXIT_FAILURE);
+    }
+
+    if (vm.count("weights_aux")) {
+        cfg_weightsfile_aux = vm["weights_aux"].as<std::string>();
+        cfg_have_aux_net = true;
+    } else {
+        cfg_have_aux_net = false;
     }
 
     if (vm.count("gtp")) {
@@ -353,7 +364,11 @@ void init_global_objects() {
     NNCache::get_NNCache().set_size_from_playouts(playouts);
 
     // Initialize network
-    Network::initialize();
+    main_net.initialize(cfg_weightsfile);
+
+    if (cfg_have_aux_net) {
+        aux_net.initialize(cfg_weightsfile_aux);
+    }
 }
 
 void benchmark(GameState& game) {

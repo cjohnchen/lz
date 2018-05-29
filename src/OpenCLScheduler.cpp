@@ -23,7 +23,6 @@
 #include "OpenCLScheduler.h"
 
 thread_local auto current_thread_gpu_num = size_t{0};
-OpenCLScheduler opencl;
 
 void OpenCLScheduler::initialize(const int channels) {
     // multi-gpu?
@@ -35,10 +34,6 @@ void OpenCLScheduler::initialize(const int channels) {
             opencl->initialize(channels, {gpu}, silent);
             m_opencl.push_back(std::move(opencl));
             m_networks.push_back(std::move(net));
-
-            // Clear thread data on every init call.  We don't know which GPU
-            // this thread will be eventually be assigned to
-            opencl_thread_data = ThreadData();
 
             // starting next GPU, let's not dump full list of GPUs
             silent = true;

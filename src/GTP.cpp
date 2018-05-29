@@ -69,12 +69,14 @@ float cfg_puct;
 float cfg_softmax_temp;
 float cfg_fpu_reduction;
 std::string cfg_weightsfile;
+std::string cfg_weightsfile_aux;
 std::string cfg_logfile;
 FILE* cfg_logfile_handle;
 bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
 int cfg_analyze_interval_centis;
+bool cfg_have_aux_net;
 
 void GTP::setup_default_parameters() {
     cfg_gtp_mode = false;
@@ -579,24 +581,24 @@ bool GTP::execute(GameState & game, std::string xinput) {
         Network::Netresult vec;
         if (cmdstream.fail()) {
             // Default = DIRECT with no rotation
-            vec = Network::get_scored_moves(
+            vec = main_net.get_scored_moves(
                 &game, Network::Ensemble::DIRECT, 0, true);
         } else if (symmetry == "all") {
             for (auto r = 0; r < 8; r++) {
-                vec = Network::get_scored_moves(
+                vec = main_net.get_scored_moves(
                     &game, Network::Ensemble::DIRECT, r, true);
-                Network::show_heatmap(&game, vec, false);
+                main_net.show_heatmap(&game, vec, false);
             }
         } else if (symmetry == "average" || symmetry == "avg") {
-            vec = Network::get_scored_moves(
+            vec = main_net.get_scored_moves(
                 &game, Network::Ensemble::AVERAGE, 8, true);
         } else {
-            vec = Network::get_scored_moves(
+            vec = main_net.get_scored_moves(
                 &game, Network::Ensemble::DIRECT, std::stoi(symmetry), true);
         }
 
         if (symmetry != "all") {
-            Network::show_heatmap(&game, vec, false);
+            main_net.show_heatmap(&game, vec, false);
         }
 
         gtp_printf(id, "");
@@ -747,9 +749,9 @@ bool GTP::execute(GameState & game, std::string xinput) {
         cmdstream >> iterations;
 
         if (!cmdstream.fail()) {
-            Network::benchmark(&game, iterations);
+            main_net.benchmark(&game, iterations);
         } else {
-            Network::benchmark(&game);
+            main_net.benchmark(&game);
         }
         gtp_printf(id, "");
         return true;

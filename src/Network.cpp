@@ -62,37 +62,6 @@
 namespace x3 = boost::spirit::x3;
 using namespace Utils;
 
-// Input + residual block tower
-static std::vector<std::vector<float>> conv_weights;
-static std::vector<std::vector<float>> conv_biases;
-static std::vector<std::vector<float>> batchnorm_means;
-static std::vector<std::vector<float>> batchnorm_stddivs;
-
-// Policy head
-static std::vector<float> conv_pol_w;
-static std::vector<float> conv_pol_b;
-static std::array<float, 2> bn_pol_w1;
-static std::array<float, 2> bn_pol_w2;
-
-static std::array<float, (BOARD_SQUARES + 1) * BOARD_SQUARES * 2> ip_pol_w;
-static std::array<float, BOARD_SQUARES + 1> ip_pol_b;
-
-// Value head
-static std::vector<float> conv_val_w;
-static std::vector<float> conv_val_b;
-static std::array<float, 1> bn_val_w1;
-static std::array<float, 1> bn_val_w2;
-
-static std::array<float, BOARD_SQUARES * 256> ip1_val_w;
-static std::array<float, 256> ip1_val_b;
-
-static std::array<float, 256> ip2_val_w;
-static std::array<float, 1> ip2_val_b;
-static bool value_head_not_stm;
-
-// Symmetry helper
-static std::array<std::array<int, BOARD_SQUARES>, 8> symmetry_nn_idx_table;
-
 void Network::benchmark(const GameState* const state, const int iterations) {
     const auto cpus = cfg_num_threads;
     const Time start;
@@ -101,10 +70,10 @@ void Network::benchmark(const GameState* const state, const int iterations) {
     std::atomic<int> runcount{0};
 
     for (auto i = 0; i < cpus; i++) {
-        tg.add_task([&runcount, iterations, state]() {
+        tg.add_task([&runcount, iterations, state, this]() {
             while (runcount < iterations) {
                 runcount++;
-                get_scored_moves(state, Ensemble::RANDOM_SYMMETRY, -1, true);
+                this->get_scored_moves(state, Ensemble::RANDOM_SYMMETRY, -1, true);
             }
         });
     }
@@ -348,7 +317,9 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
     return {0, 0};
 }
 
-void Network::initialize() {
+void Network::initialize(const std::string &weightsfile) {
+	nncache = new NNCache();
+
     // Prepare symmetry table
     for (auto s = 0; s < 8; s++) {
         for (auto v = 0; v < BOARD_SQUARES; v++) {
@@ -358,7 +329,7 @@ void Network::initialize() {
 
     // Load network from file
     size_t channels, residual_blocks;
-    std::tie(channels, residual_blocks) = load_network_file(cfg_weightsfile);
+    std::tie(channels, residual_blocks) = load_network_file(weightsfile);
     if (channels == 0) {
         exit(EXIT_FAILURE);
     }
@@ -880,7 +851,7 @@ Network::Netresult Network::get_scored_moves(
 
     if (!skip_cache) {
         // See if we already have this in the cache.
-        if (NNCache::get_NNCache().lookup(state->board.get_hash(), result)) {
+        if (nncache->get_NNCache().lookup(state->board.get_hash(), result)) {
             return result;
         }
     }
@@ -913,7 +884,7 @@ Network::Netresult Network::get_scored_moves(
     }
 
     // Insert result into cache.
-    NNCache::get_NNCache().insert(state->board.get_hash(), result);
+    nncache->get_NNCache().insert(state->board.get_hash(), result);
 
     return result;
 }

@@ -77,7 +77,14 @@ bool UCTNode::create_children(std::atomic<int>& nodecount,
     m_is_expanding = true;
     lock.unlock();
 
-    const auto raw_netlist = Network::get_scored_moves(
+    Network *net;
+
+    if (cfg_have_aux_net && state.board.black_to_move()) {
+        net = &aux_net;
+    } else {
+        net = &main_net;
+    }
+    const auto raw_netlist = net->get_scored_moves(
         &state, Network::Ensemble::RANDOM_SYMMETRY);
 
     // DCNN returns winrate as side to move

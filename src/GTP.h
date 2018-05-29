@@ -53,6 +53,8 @@ extern float cfg_softmax_temp;
 extern float cfg_fpu_reduction;
 extern std::string cfg_logfile;
 extern std::string cfg_weightsfile;
+extern std::string cfg_weightsfile_aux;
+extern bool cfg_have_aux_net;
 extern FILE* cfg_logfile_handle;
 extern bool cfg_quiet;
 extern std::string cfg_options_str;
