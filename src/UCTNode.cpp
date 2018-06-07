@@ -256,11 +256,13 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
     // Count parentvisits manually to avoid issues with transpositions.
     auto total_visited_policy = 0.0f;
     auto parentvisits = size_t{0};
+    auto parent_total_blackeval = get_pure_eval(FastBoard::BLACK);
     for (const auto& child : m_children) {
         if (child.valid()) {
             parentvisits += child.get_visits();
             if (child.get_visits() > 0) {
                 total_visited_policy += child.get_score();
+                parent_total_blackeval += child.get_blackevals();
             }
         }
     }
@@ -271,7 +273,11 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
     // Do not do this if we have introduced noise at this node exactly
     // to explore more.
     
-    auto pure_eval = get_pure_eval(color); 
+    parentvisits++;
+    auto pure_eval = parent_total_blackeval / float(parentvisits);
+    if (color == FastBoard::WHITE) {
+        pure_eval = 1.0 - pure_eval;
+    }
     if (!is_root || !cfg_noise) {
         fpu_reduction = cfg_fpu_reduction * std::sqrt(total_visited_policy);
         if (cfg_puct_factor == 2) {
