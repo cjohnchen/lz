@@ -90,6 +90,11 @@ float UCTNodePointer::get_eval(int tomove) const {
     return read_ptr()->get_eval(tomove);
 }
 
+double UCTNodePointer::get_blackevals() const {
+    assert(is_inflated());
+    return read_ptr()->get_blackevals();
+}
+
 int UCTNodePointer::get_move() const {
     if (is_inflated()) return read_ptr()->get_move();
     return read_vertex();
