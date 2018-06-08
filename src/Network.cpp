@@ -948,6 +948,23 @@ Network::Netresult Network::get_scored_moves(
     return result;
 }
 
+const float wr = 0.05; // 0.17604;
+const float wrx = log((1 - wr) / wr) / 2;
+//const float cwr = 2 * wr * (1 - wr) * wrx;
+const float cwr = 2 * wr * (1 - wr);
+//const float swr = wr + cwr * log(wrx);
+const float swr = wr + cwr * wrx;
+
+float adjusted_winrate(float x) {
+    if (x > -wrx) {
+        return 1.0 / (1.0 + std::exp(-2.0 * x));
+    }
+    else {
+        //return swr - cwr * log(-x);
+        return swr + cwr * x;
+    }
+}
+
 Network::Netresult Network::get_scored_moves_internal(
     const GameState* const state, const int symmetry) {
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
@@ -999,10 +1016,14 @@ Network::Netresult Network::get_scored_moves_internal(
         innerproduct<BOARD_SQUARES, 256, true>(value_data, ip1_val_w, ip1_val_b);
     const auto winrate_out =
         innerproduct<256, 1, false>(winrate_data, ip2_val_w, ip2_val_b);
-
-    // Map TanH output range [-1..1] to [0..1] range
-    const auto winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;
-
+    
+    float winrate; 
+    if (value_head_not_stm || state->board.get_to_move() == FastBoard::BLACK) {
+        winrate = 1.0 - adjusted_winrate(-winrate_out[0]);
+	} else {
+        winrate = adjusted_winrate(winrate_out[0]);
+	}
+    
     Netresult result;
 
     for (auto idx = size_t{0}; idx < BOARD_SQUARES; idx++) {
