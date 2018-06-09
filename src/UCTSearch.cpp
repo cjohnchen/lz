@@ -25,6 +25,7 @@
 #include <limits>
 #include <memory>
 #include <type_traits>
+#include <algorithm>
 
 #include "FastBoard.h"
 #include "FastState.h"
@@ -39,6 +40,36 @@
 using namespace Utils;
 
 constexpr int UCTSearch::UNLIMITED_PLAYOUTS;
+
+class OutputAnalysisData {
+public:
+    OutputAnalysisData(const std::string& move, int visits, int winrate, std::string pv) :
+        m_move(move), m_visits(visits), m_winrate(winrate), m_pv(pv) {};
+
+    std::string get_info_string(int order) const {
+        auto tmp = "info move " + m_move + " visits " + std::to_string(m_visits) +
+                          " winrate " + std::to_string(m_winrate);
+        if (order >= 0) {
+            tmp += " order " + std::to_string(order);
+        }
+        tmp += " pv " + m_pv;
+        return tmp;
+    }
+
+    friend bool operator<(const OutputAnalysisData& a, const OutputAnalysisData& b) {
+        if (a.m_visits == b.m_visits) {
+            return a.m_winrate < b.m_winrate;
+        }
+        return a.m_visits < b.m_visits;
+    }
+
+private:
+    std::string m_move;
+    int m_visits;
+    int m_winrate;
+    std::string m_pv;
+};
+
 
 UCTSearch::UCTSearch(GameState& g)
     : m_rootstate(g) {
@@ -238,6 +269,9 @@ void UCTSearch::dump_stats(FastState & state, UCTNode & parent) {
 }
 
 void UCTSearch::output_analysis(FastState & state, UCTNode & parent) {
+    // We need to make a copy of the data before sorting
+    auto sortable_data = std::vector<OutputAnalysisData>();
+
     if (!parent.has_children()) {
         return;
     }
@@ -253,13 +287,24 @@ void UCTSearch::output_analysis(FastState & state, UCTNode & parent) {
         tmpstate.play_move(node->get_move());
         std::string pv = move + " " + get_pv(tmpstate, *node);
         auto move_eval = node->get_visits() ?
-            static_cast<int>(node->get_pure_eval(color) * 10000) : 0;
-        gtp_printf_raw("info %s %s %s %d %s %d %s %s\n",
-                       "move", move.c_str(),
-                       "visits", node->get_visits(),
-                       "winrate", move_eval,
-                       "pv", pv.c_str());
+                         static_cast<int>(node->get_pure_eval(color) * 10000) : 0;
+        // Store data in array
+        sortable_data.emplace_back(move, node->get_visits(), move_eval, pv);
+
     }
+    // Sort array to decide order
+    std::stable_sort(rbegin(sortable_data), rend(sortable_data));
+
+    auto i = 0;
+    // Output analysis data in gtp stream
+    for (const auto& node : sortable_data) {
+        if (i > 0) {
+            gtp_printf_raw(" ");
+        }
+        gtp_printf_raw(node.get_info_string(i).c_str());
+        i++;
+    }
+    gtp_printf_raw("\n");
 }
 
 void tree_stats_helper(const UCTNode& node, size_t depth,
@@ -518,7 +563,7 @@ int UCTSearch::est_playouts_left(int elapsed_centis, int time_for_move) const {
                     static_cast<int>(std::ceil(playout_rate * time_left)));
 }
 
-size_t UCTSearch::prune_noncontenders(int elapsed_centis, int time_for_move) {
+size_t UCTSearch::prune_noncontenders(int elapsed_centis, int time_for_move, bool prune) {
     auto Nfirst = 0;
     // There are no cases where the root's children vector gets modified
     // during a multithreaded search, so it is safe to walk it here without
@@ -536,7 +581,9 @@ size_t UCTSearch::prune_noncontenders(int elapsed_centis, int time_for_move) {
             const auto has_enough_visits =
                 node->get_visits() >= min_required_visits;
 
-            node->set_active(has_enough_visits);
+            if (prune) {
+                node->set_active(has_enough_visits);
+            }
             if (!has_enough_visits) {
                 ++pruned_nodes;
             }
@@ -551,7 +598,9 @@ bool UCTSearch::have_alternate_moves(int elapsed_centis, int time_for_move) {
     if (cfg_timemanage == TimeManagement::OFF) {
         return true;
     }
-    auto pruned = prune_noncontenders(elapsed_centis, time_for_move);
+    // For self play use. Disables pruning of non-contenders to not bias the training data.
+    auto prune = cfg_timemanage != TimeManagement::NO_PRUNING;
+    auto pruned = prune_noncontenders(elapsed_centis, time_for_move, prune);
     if (pruned < m_root->get_children().size() - 1) {
         return true;
     }
@@ -610,9 +659,10 @@ int UCTSearch::think(int color, passflag_t passflag) {
     // set side to move
     m_rootstate.board.set_to_move(color);
 
-    m_rootstate.get_timecontrol().set_boardsize(
-        m_rootstate.board.get_boardsize());
-    auto time_for_move = m_rootstate.get_timecontrol().max_time_for_move(color, m_rootstate.get_movenum());
+    auto time_for_move =
+        m_rootstate.get_timecontrol().max_time_for_move(
+            m_rootstate.board.get_boardsize(),
+            color, m_rootstate.get_movenum());
 
     myprintf("Thinking at most %.1f seconds...\n", time_for_move/100.0f);
 
