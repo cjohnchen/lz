@@ -1,6 +1,6 @@
 /*
     This file is part of Leela Zero.
-    Copyright (C) 2017 Gian-Carlo Pascutto
+    Copyright (C) 2017-2018 Gian-Carlo Pascutto and contributors
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@
 #include "FullBoard.h"
 
 void KoState::init_game(int size, float komi) {
-    assert(size <= FastBoard::MAXBOARDSIZE);
+    assert(size <= BOARD_SIZE);
 
     FastState::init_game(size, komi);
 

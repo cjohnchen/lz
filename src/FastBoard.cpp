@@ -1,6 +1,6 @@
 /*
     This file is part of Leela Zero.
-    Copyright (C) 2017 Gian-Carlo Pascutto
+    Copyright (C) 2017-2018 Gian-Carlo Pascutto and contributors
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,11 +26,11 @@
 #include <string>
 
 #include "Utils.h"
+#include "config.h"
 
 using namespace Utils;
 
 const int FastBoard::NBR_SHIFT;
-const int FastBoard::MAXBOARDSIZE;
 const int FastBoard::MAXSQ;
 const int FastBoard::BIG;
 const int FastBoard::PASS;
@@ -50,8 +50,8 @@ int FastBoard::get_boardsize(void) const {
 }
 
 int FastBoard::get_vertex(int x, int y) const {
-    assert(x >= 0 && x < MAXBOARDSIZE);
-    assert(y >= 0 && y < MAXBOARDSIZE);
+    assert(x >= 0 && x < BOARD_SIZE);
+    assert(y >= 0 && y < BOARD_SIZE);
     assert(x >= 0 && x < m_boardsize);
     assert(y >= 0 && y < m_boardsize);
 
@@ -313,8 +313,7 @@ void FastBoard::print_columns() {
     for (int i = 0; i < get_boardsize(); i++) {
         if (i < 25) {
             myprintf("%c ", (('a' + i < 'i') ? 'a' + i : 'a' + i + 1));
-        }
-        else {
+        } else {
             myprintf("%c ", (('A' + (i - 25) < 'I') ? 'A' + (i - 25) : 'A' + (i - 25) + 1));
         }
     }
@@ -408,8 +407,12 @@ std::string FastBoard::move_to_text(int move) const {
     column--;
     row--;
 
-    assert(move == FastBoard::PASS || move == FastBoard::RESIGN || (row >= 0 && row < m_boardsize));
-    assert(move == FastBoard::PASS || move == FastBoard::RESIGN || (column >= 0 && column < m_boardsize));
+    assert(move == FastBoard::PASS
+           || move == FastBoard::RESIGN
+           || (row >= 0 && row < m_boardsize));
+    assert(move == FastBoard::PASS
+           || move == FastBoard::RESIGN
+           || (column >= 0 && column < m_boardsize));
 
     if (move >= 0 && move <= m_maxsq) {
         result << static_cast<char>(column < 8 ? 'A' + column : 'A' + column + 1);
@@ -434,8 +437,12 @@ std::string FastBoard::move_to_text_sgf(int move) const {
     column--;
     row--;
 
-    assert(move == FastBoard::PASS || move == FastBoard::RESIGN || (row >= 0 && row < m_boardsize));
-    assert(move == FastBoard::PASS || move == FastBoard::RESIGN || (column >= 0 && column < m_boardsize));
+    assert(move == FastBoard::PASS
+           || move == FastBoard::RESIGN
+           || (row >= 0 && row < m_boardsize));
+    assert(move == FastBoard::PASS
+           || move == FastBoard::RESIGN
+           || (column >= 0 && column < m_boardsize));
 
     // SGF inverts rows
     row = m_boardsize - row - 1;

@@ -1,6 +1,6 @@
 /*
     This file is part of Leela Zero.
-    Copyright (C) 2017 Gian-Carlo Pascutto
+    Copyright (C) 2017-2018 Gian-Carlo Pascutto and contributors
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -38,14 +38,9 @@ public:
     static constexpr int NBR_MASK = (1 << NBR_SHIFT) - 1;
 
     /*
-        largest board supported
-    */
-    static constexpr int MAXBOARDSIZE = 19;
-
-    /*
         highest existing square
     */
-    static constexpr int MAXSQ = ((MAXBOARDSIZE + 2) * (MAXBOARDSIZE + 2));
+    static constexpr int MAXSQ = ((BOARD_SIZE + 2) * (BOARD_SIZE + 2));
 
     /*
         infinite score

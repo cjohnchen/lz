@@ -1,6 +1,6 @@
 /*
     This file is part of Leela Zero.
-    Copyright (C) 2017 Gian-Carlo Pascutto
+    Copyright (C) 2017-2018 Gian-Carlo Pascutto and contributors
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@
 
 #include "Tuner.h"
 
-static constexpr auto WINOGRAD_P = (19 + 1) * (19 + 1) / 4;
+static constexpr auto WINOGRAD_P = (BOARD_SIZE + 1) * (BOARD_SIZE + 1) / 4;
 static constexpr auto WINOGRAD_TILE = 4 * 4;
 
 class OpenCL;

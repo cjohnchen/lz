@@ -1,6 +1,6 @@
 /*
     This file is part of Leela Zero.
-    Copyright (C) 2017 Gian-Carlo Pascutto
+    Copyright (C) 2017-2018 Gian-Carlo Pascutto and contributors
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -43,13 +43,23 @@
 using namespace Utils;
 
 static std::string cl_args =
+#ifdef USE_HALF
+    "-DUSE_HALF "
+#endif
     "-cl-mad-enable -cl-fast-relaxed-math -cl-no-signed-zeros -cl-denorms-are-zero";
 
 static std::string sourceCode_config = R"(
+#ifdef USE_HALF
+    typedef half net_t;
+    #define vload_net_t(offset,p) vload_half(offset,p)
+    #define vstore_net_t(data,offset,p) vstore_half(data,offset,p)
+#else
     typedef float net_t;
     #define vload_net_t(offset,p) ((p)[(offset)])
     #define vstore_net_t(data,offset,p) (((p)[(offset)])=(data))
-)";
+#endif
+    #define BOARD_SIZE )" + std::to_string(BOARD_SIZE) +
+    "\n    #define BOARD_SQUARES " + std::to_string(BOARD_SQUARES);
 
 static std::string sourceCode_convolve1 = R"(
     __kernel
@@ -77,17 +87,17 @@ static std::string sourceCode_convolve1 = R"(
         // output = outputs * height * width
         // weights = output * channels * filter
         // merge = channels * outputs * height * width
-        const int width = 19;
-        const int height = 19;
+        const int width = BOARD_SIZE;
+        const int height = BOARD_SIZE;
         const int strip_size = width;
         // Copy the input channels (strips) locally
-        if (out_buff_size < 19 && ly == 0) {
+        if (out_buff_size < BOARD_SIZE && ly == 0) {
             // strip-row
             for (int w = 0; w < width; w++) {
                 channel_buff[lx * width + w] =
                     vload_net_t((c * height + row) * width + w, in);
             }
-        } else if (out_buff_size >= 19 && ly < 19) {
+        } else if (out_buff_size >= BOARD_SIZE && ly < BOARD_SIZE) {
             // Every thread copies a column
             channel_buff[lx * width + ly] = vload_net_t((c * height + row) * width + ly, in);
         }
@@ -127,26 +137,25 @@ __kernel void merge(
                         __global const net_t * restrict in,
                         __global net_t * restrict out,
                         __private const int channels) {
-        // cl::NDRange global(outputs, 19*19);
+        // cl::NDRange global(outputs, BOARD_SQUARES);
         const int gx = get_global_id(0);
         const int gy = get_global_id(1);
         const int output = gx;
         const int b = gy;
         const int outputs = get_global_size(0);
-        const int width = 19;
-        const int height = 19;
-        const int boardsize = width * height;
+        const int width = BOARD_SIZE;
+        const int height = BOARD_SIZE;
         const int o = output;
         float sum = 0;
         for (int c = 0; c < channels; c++) {
-            sum += vload_net_t((c * boardsize + b) * outputs + o, in);
+            sum += vload_net_t((c * BOARD_SQUARES + b) * outputs + o, in);
         }
-        vstore_net_t(sum, o * boardsize + b, out);
+        vstore_net_t(sum, o * BOARD_SQUARES + b, out);
     }
 )";
 
 static std::string sourceCode_convolve3 = R"(
-void __in_transform_eq(float x[4][4], __global float * restrict V, int offset, int CPpad) {
+void __in_transform_eq(float x[4][4], __global net_t * restrict V, int offset, int CPpad) {
     float T1[4][4];
 
     T1[0][0] = x[0][0] - x[2][0];
@@ -166,29 +175,29 @@ void __in_transform_eq(float x[4][4], __global float * restrict V, int offset, i
     T1[3][2] = x[1][2] - x[3][2];
     T1[3][3] = x[1][3] - x[3][3];
 
-    V[(0*4 + 0)*CPpad + offset] = T1[0][0] - T1[0][2];
-    V[(0*4 + 1)*CPpad + offset] = T1[0][1] + T1[0][2];
-    V[(0*4 + 2)*CPpad + offset] = T1[0][2] - T1[0][1];
-    V[(0*4 + 3)*CPpad + offset] = T1[0][1] - T1[0][3];
-    V[(1*4 + 0)*CPpad + offset] = T1[1][0] - T1[1][2];
-    V[(1*4 + 1)*CPpad + offset] = T1[1][1] + T1[1][2];
-    V[(1*4 + 2)*CPpad + offset] = T1[1][2] - T1[1][1];
-    V[(1*4 + 3)*CPpad + offset] = T1[1][1] - T1[1][3];
-    V[(2*4 + 0)*CPpad + offset] = T1[2][0] - T1[2][2];
-    V[(2*4 + 1)*CPpad + offset] = T1[2][1] + T1[2][2];
-    V[(2*4 + 2)*CPpad + offset] = T1[2][2] - T1[2][1];
-    V[(2*4 + 3)*CPpad + offset] = T1[2][1] - T1[2][3];
-    V[(3*4 + 0)*CPpad + offset] = T1[3][0] - T1[3][2];
-    V[(3*4 + 1)*CPpad + offset] = T1[3][1] + T1[3][2];
-    V[(3*4 + 2)*CPpad + offset] = T1[3][2] - T1[3][1];
-    V[(3*4 + 3)*CPpad + offset] = T1[3][1] - T1[3][3];
+    vstore_net_t(T1[0][0] - T1[0][2], (0*4 + 0)*CPpad + offset, V);
+    vstore_net_t(T1[0][1] + T1[0][2], (0*4 + 1)*CPpad + offset, V);
+    vstore_net_t(T1[0][2] - T1[0][1], (0*4 + 2)*CPpad + offset, V);
+    vstore_net_t(T1[0][1] - T1[0][3], (0*4 + 3)*CPpad + offset, V);
+    vstore_net_t(T1[1][0] - T1[1][2], (1*4 + 0)*CPpad + offset, V);
+    vstore_net_t(T1[1][1] + T1[1][2], (1*4 + 1)*CPpad + offset, V);
+    vstore_net_t(T1[1][2] - T1[1][1], (1*4 + 2)*CPpad + offset, V);
+    vstore_net_t(T1[1][1] - T1[1][3], (1*4 + 3)*CPpad + offset, V);
+    vstore_net_t(T1[2][0] - T1[2][2], (2*4 + 0)*CPpad + offset, V);
+    vstore_net_t(T1[2][1] + T1[2][2], (2*4 + 1)*CPpad + offset, V);
+    vstore_net_t(T1[2][2] - T1[2][1], (2*4 + 2)*CPpad + offset, V);
+    vstore_net_t(T1[2][1] - T1[2][3], (2*4 + 3)*CPpad + offset, V);
+    vstore_net_t(T1[3][0] - T1[3][2], (3*4 + 0)*CPpad + offset, V);
+    vstore_net_t(T1[3][1] + T1[3][2], (3*4 + 1)*CPpad + offset, V);
+    vstore_net_t(T1[3][2] - T1[3][1], (3*4 + 2)*CPpad + offset, V);
+    vstore_net_t(T1[3][1] - T1[3][3], (3*4 + 3)*CPpad + offset, V);
 }
 
-__kernel void in_transform(__global net_t * restrict in, __global float * restrict V,
+__kernel void in_transform(__global net_t * restrict in, __global net_t * restrict V,
                            const int C, const int Cpad,
                            const int Ppad) {
-    const int W = 19;
-    const int H = 19;
+    const int W = BOARD_SIZE;
+    const int H = BOARD_SIZE;
     const int T = W*H;
     const int WTILES = (W + 1) / 2;
     const int P = WTILES*WTILES;
@@ -225,18 +234,18 @@ __kernel void in_transform(__global net_t * restrict in, __global float * restri
     }
 }
 
-void __out_transform_eq(__global const float * restrict M, float o[4],
+void __out_transform_eq(__global const net_t * restrict M, float o[4],
                         int Kpad, int Ppad, int block_x, int block_y)
 {
-    const int W = 19;
-    const int H = 19;
+    const int W = BOARD_SIZE;
+    const int H = BOARD_SIZE;
     const int WTILES = (W + 1) / 2;
     const int b = block_y * WTILES + block_x;
     const int KPpad = Kpad * Ppad;
     const int k = get_global_id(0);
     float temp_m[16];
     for (int xn = 0, xnKPpad = b*Kpad + k; xn < 16; xn++, xnKPpad += KPpad) {
-        temp_m[xn] = M[xnKPpad];
+        temp_m[xn] = vload_net_t(xnKPpad, M);
     }
 
     o[0] = temp_m[0*4 + 0] + temp_m[0*4 + 1] + temp_m[0*4 + 2] +
@@ -256,15 +265,15 @@ void __out_transform_eq(__global const float * restrict M, float o[4],
            temp_m[3*4 + 1] + temp_m[3*4 + 2] + temp_m[3*4 + 3];
 }
 
-__kernel void out_transform_fused_bn(__global const float * restrict M,
+__kernel void out_transform_fused_bn(__global const net_t * restrict M,
                                      __global net_t * restrict Y,
                                      const int K,
                                      const int Kpad, const int Ppad,
                                      __global const net_t * restrict residual,
                                      __constant const net_t * restrict means,
                                      __constant const net_t * restrict stddivs) {
-    const int W = 19;
-    const int H = 19;
+    const int W = BOARD_SIZE;
+    const int H = BOARD_SIZE;
     const int WTILES = (W + 1) / 2;
     const int P = WTILES * WTILES;
 
@@ -303,7 +312,7 @@ __kernel void out_transform_fused_bn(__global const float * restrict M,
 }
 
 __kernel void out_transform_fused_bn_in(
-                                     __global const float * restrict M,
+                                     __global const net_t * restrict M,
                                      __global net_t * restrict Y,
                                      __global net_t * restrict V,
                                      const int K,
@@ -312,8 +321,8 @@ __kernel void out_transform_fused_bn_in(
                                      __constant const net_t * restrict means,
                                      __constant const net_t * restrict stddivs,
                                      __local float * ybuf) {
-    const int W = 19;
-    const int H = 19;
+    const int W = BOARD_SIZE;
+    const int H = BOARD_SIZE;
     const int T = W*H;
     const int WTILES = (W + 1) / 2;
     const int P = WTILES * WTILES;
@@ -385,6 +394,15 @@ __kernel void out_transform_fused_bn_in(
 }
 )";
 
+#ifdef USE_HALF
+const std::string sourceCode_sgemm =
+    #include "clblast_level3_half/common.opencl"
+    #include "clblast_level3_half/xgemm_part1.opencl"
+    #include "clblast_level3_half/xgemm_part2.opencl"
+    #include "clblast_level3_half/xgemm_part3.opencl"
+    #include "clblast_level3_half/xgemm_batched.opencl"
+;
+#else
 const std::string sourceCode_sgemm =
     #include "clblast_level3/common.opencl"
     #include "clblast_level3/xgemm_part1.opencl"
@@ -392,6 +410,7 @@ const std::string sourceCode_sgemm =
     #include "clblast_level3/xgemm_part3.opencl"
     #include "clblast_level3/xgemm_batched.opencl"
 ;
+#endif
 
 thread_local ThreadData opencl_thread_data;
 
@@ -424,7 +443,7 @@ void OpenCL_Network::add_weights(size_t layer,
     }
 
     auto converted_weights = std::vector<net_t>();
-    for(auto i = size_t{0}; i < size; i++) {
+    for (auto i = size_t{0}; i < size; i++) {
         converted_weights.emplace_back(weights[i]);
     }
 
@@ -439,8 +458,8 @@ void OpenCL_Network::add_weights(size_t layer,
 void OpenCL_Network::forward(const std::vector<net_t>& input,
                              std::vector<net_t>& output_pol,
                              std::vector<net_t>& output_val) {
-    constexpr auto width = 19;
-    constexpr auto height = 19;
+    constexpr auto width = BOARD_SIZE;
+    constexpr auto height = BOARD_SIZE;
     constexpr auto tiles = WINOGRAD_P;
     constexpr auto one_plane = width * height * sizeof(net_t);
     const auto finalSize_pol = m_layers[m_layers.size()-2].outputs * one_plane;
@@ -468,7 +487,7 @@ void OpenCL_Network::forward(const std::vector<net_t>& input,
         const auto alloc_vm_size =
             WINOGRAD_TILE * m_ceil * n_ceil * sizeof(net_t);
 
-        auto v_zeros = std::vector<float>(alloc_vm_size);
+        auto v_zeros = std::vector<net_t>(alloc_vm_size);
 
         opencl_thread_data.m_inBuffer = cl::Buffer(
             m_opencl.m_context,
@@ -641,8 +660,8 @@ void OpenCL_Network::convolve3(int channels, int outputs,
     assert(wavefront_size != 0);
 
     constexpr auto tiles = WINOGRAD_P;
-    constexpr auto width = 19;
-    constexpr auto height = 19;
+    constexpr auto width = BOARD_SIZE;
+    constexpr auto height = BOARD_SIZE;
 
     auto wgs = ceilMultiple(tiles, wavefront_size);
     auto m_ceil = int(ceilMultiple(ceilMultiple(outputs, mwg), vwm));
@@ -680,7 +699,7 @@ void OpenCL_Network::convolve3(int channels, int outputs,
 
         cl::NDRange size_sgemm = {(m_ceil * mdimc) / mwg,
                                   (n_ceil * ndimc) / nwg,
-                                  (cl::size_type)WINOGRAD_TILE};
+                                  cl::size_type(WINOGRAD_TILE)};
 
         queue.enqueueNDRangeKernel(sgemm_kernel, cl::NullRange,
                                    size_sgemm, local_sgemm);
@@ -750,11 +769,10 @@ void OpenCL_Network::convolve1(int channels, int outputs,
                               cl::Buffer& bufferOutput,
                               cl::Buffer& bufferMerge,
                               weight_slice_t weights) {
-    // fixed for 19x19
-    constexpr int width = 19;
-    constexpr int height = 19;
-    constexpr int boardsize = width * height;
-    constexpr int rowTiles = 19;
+    // The size of the board is defined at compile time
+    constexpr int width = BOARD_SIZE;
+    constexpr int boardsize = BOARD_SQUARES;
+    constexpr int rowTiles = BOARD_SIZE;
 
     // Input channel grouping in multiples of 8
     constexpr int channelGroup = 8;
@@ -766,7 +784,7 @@ void OpenCL_Network::convolve1(int channels, int outputs,
 
 #ifndef NDEBUG
     // Total output size after reducing
-    size_t outSize = width * height * outputs * sizeof(net_t);
+    size_t outSize = boardsize * outputs * sizeof(net_t);
 
     // Produce channel * output planes and merge them at the end
     size_t mergeSize = (channels >> channelShift) * outSize;
@@ -793,7 +811,7 @@ void OpenCL_Network::convolve1(int channels, int outputs,
                                    cl::NDRange(channelGroup, outputGroup, rowGroup));
     } catch (const cl::Error &e) {
         std::cerr << "Error in convolve1: " << e.what() << ": "
-	        << e.err() << std::endl;
+                  << e.err() << std::endl;
         throw;
     }
 
@@ -807,10 +825,10 @@ void OpenCL_Network::convolve1(int channels, int outputs,
 
         queue.enqueueNDRangeKernel(merge_kernel, cl::NullRange,
                                    cl::NDRange(outputs, boardsize),
-                                   cl::NDRange(std::min(8, outputs), 19));
+                                   cl::NDRange(std::min(8, outputs), BOARD_SIZE));
     } catch (const cl::Error &e) {
         std::cerr << "Error in merge: " << e.what() << ": "
-	        << e.err() << std::endl;
+                  << e.err() << std::endl;
         throw;
     }
 }

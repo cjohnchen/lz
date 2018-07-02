@@ -16,302 +16,186 @@
 #    You should have received a copy of the GNU General Public License
 #    along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
 
-import sys
+
+from tfprocess import TFProcess
+from chunkparser import ChunkParser
+import argparse
 import glob
 import gzip
-import random
-import math
 import multiprocessing as mp
-import numpy as np
-import time
+import os
+import random
+import shufflebuffer as sb
+import sys
 import tensorflow as tf
-from tfprocess import TFProcess
+import time
+import unittest
 
-# 16 planes, 1 side to move, 1 x 362 probs, 1 winner = 19 lines
-DATA_ITEM_LINES = 16 + 1 + 1 + 1
-
-# Sane values are from 4096 to 64 or so. The maximum depends on the amount
-# of RAM in your GPU and the network size. You need to adjust the learning rate
-# if you change this.
+# Sane values are from 4096 to 64 or so.
+# You need to adjust the learning rate if you change this. Should be
+# a multiple of RAM_BATCH_SIZE. NB: It's rare that large batch sizes are
+# actually required.
 BATCH_SIZE = 512
+# Number of examples in a GPU batch. Higher values are more efficient.
+# The maximum depends on the amount of RAM in your GPU and the network size.
+# Must be smaller than BATCH_SIZE.
+RAM_BATCH_SIZE = 128
 
-def remap_vertex(vertex, symmetry):
-    """
-        Remap a go board coordinate according to a symmetry.
-    """
-    assert vertex >= 0 and vertex < 361
-    x = vertex % 19
-    y = vertex // 19
-    if symmetry >= 4:
-        x, y = y, x
-        symmetry -= 4
-    if symmetry == 1 or symmetry == 3:
-        x = 19 - x - 1
-    if symmetry == 2 or symmetry == 3:
-        y = 19 - y - 1
-    return y * 19 + x
-
-class ChunkParser:
-    def __init__(self, chunks, workers=None):
-        # Build probility reflection tables. The last element is 'pass' and is identity mapped.
-        self.prob_reflection_table = [[remap_vertex(vertex, sym) for vertex in range(361)]+[361] for sym in range(8)]
-        # Build full 16-plane reflection tables.
-        self.full_reflection_table = [
-            [remap_vertex(vertex, sym) + p * 361 for p in range(16) for vertex in range(361) ]
-                for sym in range(8) ]
-        # Convert both to np.array. This avoids a conversion step when they're actually used.
-        self.prob_reflection_table = [ np.array(x, dtype=np.int64) for x in self.prob_reflection_table ]
-        self.full_reflection_table = [ np.array(x, dtype=np.int64) for x in self.full_reflection_table ]
-        # Build the all-zeros and all-ones flat planes, used for color-to-move.
-        self.flat_planes = [ b'\0' * 361, b'\1' * 361 ]
-
-        # Start worker processes, leave 2 for TensorFlow
-        if workers is None:
-            workers = max(1, mp.cpu_count() - 2)
-        print("Using {} worker processes.".format(workers))
-        self.readers = []
-        for _ in range(workers):
-            read, write = mp.Pipe(False)
-            mp.Process(target=self.task,
-                       args=(chunks, write)).start()
-            self.readers.append(read)
-
-    def convert_train_data(self, text_item, symmetry):
-        """
-            Convert textual training data to a tf.train.Example
-
-            Converts a set of 19 lines of text into a pythonic dataformat.
-            [[plane_1],[plane_2],...],...
-            [probabilities],...
-            winner,...
-        """
-        assert symmetry >= 0 and symmetry < 8
-
-        # We start by building a list of 16 planes, each being a 19*19 == 361 element array
-        # of type np.uint8
-        planes = []
-        for plane in range(0, 16):
-            # first 360 first bits are 90 hex chars, encoded MSB
-            hex_string = text_item[plane][0:90]
-            array = np.unpackbits(np.frombuffer(bytearray.fromhex(hex_string), dtype=np.uint8))
-            # Remaining bit that didn't fit. Encoded LSB so
-            # it needs to be specially handled.
-            last_digit = text_item[plane][90]
-            assert last_digit == "0" or last_digit == "1"
-            # Apply symmetry and append
-            planes.append(array)
-            planes.append(np.array([last_digit], dtype=np.uint8))
-
-        # We flatten to a single array of len 16*19*19, type=np.uint8
-        planes = np.concatenate(planes)
-
-        # We use the full length reflection tables to apply symmetry
-        # to all 16 planes simultaneously
-        planes = planes[self.full_reflection_table[symmetry]]
-        # Convert the array to a byte string
-        planes = [ planes.tobytes() ]
-
-        # Now we add the two final planes, being the 'color to move' planes.
-        # These already a fully symmetric, so we add them directly as byte
-        # strings of length 361.
-        stm = text_item[16][0]
-        assert stm == "0" or stm == "1"
-        stm = int(stm)
-        planes.append(self.flat_planes[1 - stm])
-        planes.append(self.flat_planes[stm])
-
-        # Flatten all planes to a single byte string
-        planes = b''.join(planes)
-        assert len(planes) == (18 * 19 * 19)
-
-        # Load the probabilities.
-        probabilities = np.array(text_item[17].split()).astype(float)
-        if np.any(np.isnan(probabilities)):
-            # Work around a bug in leela-zero v0.3, skipping any
-            # positions that have a NaN in the probabilities list.
-            return False, None
-        # Apply symmetries to the probabilities.
-        probabilities = probabilities[self.prob_reflection_table[symmetry]]
-        assert len(probabilities) == 362
-
-        # Load the game winner color.
-        winner = float(text_item[18])
-        assert winner == 1.0 or winner == -1.0
-
-        # Construct the Example protobuf
-        example = tf.train.Example(features=tf.train.Features(feature={
-            'planes' : tf.train.Feature(bytes_list=tf.train.BytesList(value=[planes])),
-            'probs' : tf.train.Feature(float_list=tf.train.FloatList(value=probabilities)),
-            'winner' : tf.train.Feature(float_list=tf.train.FloatList(value=[winner]))}))
-        return True, example.SerializeToString()
-
-    def task(self, chunks, writer):
-        while True:
-            random.shuffle(chunks)
-            for chunk in chunks:
-                with gzip.open(chunk, 'r') as chunk_file:
-                    file_content = chunk_file.read().splitlines()
-                    item_count = len(file_content) // DATA_ITEM_LINES
-                    # Pick only 1 in every 16 positions
-                    picked_items = random.sample(range(item_count),
-                                                 (item_count + 15) // 16)
-                    for item_idx in picked_items:
-                        pick_offset = item_idx * DATA_ITEM_LINES
-                        item = file_content[pick_offset:pick_offset + DATA_ITEM_LINES]
-                        str_items = [str(line, 'ascii') for line in item]
-                        # Pick a random symmetry to apply
-                        symmetry = random.randrange(8)
-                        success, data = self.convert_train_data(str_items, symmetry)
-                        if success:
-                            # Send it down the pipe.
-                            writer.send_bytes(data)
-
-    def parse_chunk(self):
-        while True:
-            for r in self.readers:
-                yield r.recv_bytes();
+# Use a random sample input data read. This helps improve the spread of
+# games in the shuffle buffer.
+DOWN_SAMPLE = 16
 
 def get_chunks(data_prefix):
     return glob.glob(data_prefix + "*.gz")
 
-
-#
-# Tests to check that records can round-trip successfully
-def generate_fake_pos():
+class FileDataSrc:
     """
-        Generate a random game position.
-        Result is ([[361] * 18], [362], [1])
+        data source yielding chunkdata from chunk files.
     """
-    # 1. 18 binary planes of length 361
-    planes = [np.random.randint(2, size=361).tolist() for plane in range(16)]
-    stm = float(np.random.randint(2))
-    planes.append([stm] * 361)
-    planes.append([1. - stm] * 361)
-    # 2. 362 probs
-    probs = np.random.randint(3, size=362).tolist()
-    # 3. And a winner: 1 or -1
-    winner = [ 2 * float(np.random.randint(2)) - 1 ]
-    return (planes, probs, winner)
-
-def run_test(parser):
-    """
-        Test game position decoding.
-    """
-
-    # First, build a random game position.
-    planes, probs, winner = generate_fake_pos()
-
-    # Convert that to a text record in the same format
-    # generated by dump_supervised
-    items = []
-    for p in range(16):
-        # generate first 360 bits
-        h = np.packbits([int(x) for x in planes[p][0:360]]).tobytes().hex()
-        # then add the stray single bit
-        h += str(planes[p][360]) + "\n"
-        items.append(h)
-    # then who to move
-    items.append(str(int(planes[17][0])) + "\n")
-    # then probs
-    items.append(' '.join([str(x) for x in probs]) + "\n")
-    # and finally a winner
-    items.append(str(int(winner[0])) + "\n")
-
-    # Have an input string. Running it through parsing to see
-    # if it gives the same result we started with.
-    # We need a tf.Session() as we're going to use the tensorflow
-    # decoding framework for part of the parsing.
-    with tf.Session() as sess:
-        # We apply and check every symmetry.
-        for symmetry in range(8):
-            result = parser.convert_train_data(items, symmetry)
-            assert result[0] == True
-            # We got back a serialized tf.train.Example, which we need to decode.
-            graph = _parse_function(result[1])
-            data = sess.run(graph)
-            data = (data[0].tolist(), data[1].tolist(), data[2].tolist())
-
-            # Apply the symmetry to the original
-            sym_planes = [ [ plane[remap_vertex(vertex, symmetry)] for vertex in range(361) ] for plane in planes ]
-            sym_probs = [ probs[remap_vertex(vertex, symmetry)] for vertex in range(361)] + [probs[361]]
-
-            # Check that what we got out matches what we put in.
-            assert data == (sym_planes, sym_probs, winner)
-    print("Test parse passes")
-
-
-# Convert a tf.train.Example protobuf into a tuple of tensors
-# NB: This conversion is done in the tensorflow graph, NOT in python.
-def _parse_function(example_proto):
-    features = {"planes": tf.FixedLenFeature((1), tf.string),
-                "probs": tf.FixedLenFeature((19*19+1), tf.float32),
-                "winner": tf.FixedLenFeature((1), tf.float32)}
-    parsed_features = tf.parse_single_example(example_proto, features)
-    # We receives the planes as a byte array, but we really want
-    # floats of shape (18, 19*19), so decode, cast, and reshape.
-    planes = tf.decode_raw(parsed_features["planes"], tf.uint8)
-    planes = tf.to_float(planes)
-    planes = tf.reshape(planes, (18, 19*19))
-    # the other features are already in the correct shape as return as-is.
-    return planes, parsed_features["probs"], parsed_features["winner"]
+    def __init__(self, chunks):
+        self.chunks = []
+        self.done = chunks
+    def next(self):
+        if not self.chunks:
+            self.chunks, self.done = self.done, self.chunks
+            random.shuffle(self.chunks)
+        if not self.chunks:
+            return None
+        while len(self.chunks):
+            filename = self.chunks.pop()
+            try:
+                with gzip.open(filename, 'rb') as chunk_file:
+                    self.done.append(filename)
+                    return chunk_file.read()
+            except:
+                print("failed to parse {}".format(filename))
 
 def benchmark(parser):
-    gen = parser.parse_chunk()
+    """
+        Benchmark for parser
+    """
+    gen = parser.parse()
+    batch=100
     while True:
         start = time.time()
-        for _ in range(10000):
+        for _ in range(batch):
             next(gen)
         end = time.time()
-        print("{} pos/sec {} secs".format( 10000. / (end - start), (end - start)))
+        print("{} pos/sec {} secs".format(
+            RAM_BATCH_SIZE * batch / (end - start), (end - start)))
+
+def benchmark1(t):
+    """
+        Benchmark for full input pipeline, including tensorflow conversion
+    """
+    batch=100
+    while True:
+        start = time.time()
+        for _ in range(batch):
+            t.session.run([t.next_batch],
+                feed_dict={t.training: True, t.handle: t.train_handle})
+
+        end = time.time()
+        print("{} pos/sec {} secs".format(
+            RAM_BATCH_SIZE * batch / (end - start), (end - start)))
+
 
 def split_chunks(chunks, test_ratio):
     splitpoint = 1 + int(len(chunks) * (1.0 - test_ratio))
     return (chunks[:splitpoint], chunks[splitpoint:])
 
-def main(args):
-    train_data_prefix = args.pop(0)
+def main():
+    parser = argparse.ArgumentParser(
+        description='Train network from game data.')
+    parser.add_argument("trainpref",
+        help='Training file prefix', nargs='?', type=str)
+    parser.add_argument("restorepref",
+        help='Training snapshot prefix', nargs='?', type=str)
+    parser.add_argument("--train", '-t',
+        help="Training file prefix", type=str)
+    parser.add_argument("--test", help="Test file prefix", type=str)
+    parser.add_argument("--restore", type=str,
+        help="Prefix of tensorflow snapshot to restore from")
+    parser.add_argument("--logbase", default='leelalogs', type=str,
+        help="Log file prefix (for tensorboard)")
+    parser.add_argument("--sample", default=DOWN_SAMPLE, type=int,
+        help="Rate of data down-sampling to use")
+    args = parser.parse_args()
 
-    chunks = get_chunks(train_data_prefix)
-    print("Found {0} chunks".format(len(chunks)))
+    train_data_prefix = args.train or args.trainpref
+    restore_prefix = args.restore or args.restorepref
 
-    if not chunks:
+    training = get_chunks(train_data_prefix)
+    if not args.test:
+        # Generate test by taking 10% of the training chunks.
+        random.shuffle(training)
+        training, test = split_chunks(training, 0.1)
+    else:
+        test = get_chunks(args.test)
+
+    if not training:
+        print("No data to train on!")
         return
 
-    # The following assumes positions from one game are not
-    # spread through chunks.
-    random.shuffle(chunks)
-    training, test = split_chunks(chunks, 0.1)
     print("Training with {0} chunks, validating on {1} chunks".format(
         len(training), len(test)))
 
-    #run_test(parser)
-    #benchmark(parser)
+    train_parser = ChunkParser(FileDataSrc(training),
+                               shuffle_size=1<<20, # 2.2GB of RAM.
+                               sample=args.sample,
+                               batch_size=RAM_BATCH_SIZE).parse()
 
-    train_parser = ChunkParser(training)
-    dataset = tf.data.Dataset.from_generator(
-        train_parser.parse_chunk, output_types=(tf.string))
-    dataset = dataset.shuffle(1 << 18)
-    dataset = dataset.map(_parse_function)
-    dataset = dataset.batch(BATCH_SIZE)
-    dataset = dataset.prefetch(4)
-    train_iterator = dataset.make_one_shot_iterator()
-
-    test_parser = ChunkParser(test)
-    dataset = tf.data.Dataset.from_generator(
-        test_parser.parse_chunk, output_types=(tf.string))
-    dataset = dataset.map(_parse_function)
-    dataset = dataset.batch(BATCH_SIZE)
-    dataset = dataset.prefetch(4)
-    test_iterator = dataset.make_one_shot_iterator()
+    test_parser = ChunkParser(FileDataSrc(test),
+                              shuffle_size=1<<19,
+                              sample=args.sample,
+                              batch_size=RAM_BATCH_SIZE).parse()
 
     tfprocess = TFProcess()
-    tfprocess.init(dataset, train_iterator, test_iterator)
-    if args:
-        restore_file = args.pop(0)
-        tfprocess.restore(restore_file)
-    while True:
-        tfprocess.process(BATCH_SIZE)
+    tfprocess.init(RAM_BATCH_SIZE,
+                   logbase=args.logbase,
+                   macrobatch=BATCH_SIZE // RAM_BATCH_SIZE)
+
+    #benchmark1(tfprocess)
+
+    if restore_prefix:
+        tfprocess.restore(restore_prefix)
+    tfprocess.process(train_parser, test_parser)
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    mp.set_start_method('spawn')
+    main()
     mp.freeze_support()
+
+# Tests.
+# To run: python3 -m unittest parse.TestParse
+class TestParse(unittest.TestCase):
+    def test_datasrc(self):
+        # create chunk files
+        num_chunks = 3
+        chunks = []
+        for x in range(num_chunks):
+            filename = '/tmp/parse-unittest-chunk'+str(x)+'.gz'
+            chunk_file = gzip.open(filename, 'w', 1)
+            chunk_file.write(bytes(x))
+            chunk_file.close()
+            chunks.append(filename)
+        # create a data src, passing a copy of the
+        # list of chunks.
+        ds = FileDataSrc(list(chunks))
+        # get sample of 200 chunks from the data src
+        counts={}
+        for _ in range(200):
+            data = ds.next()
+            if data in counts:
+                counts[data] += 1
+            else:
+                counts[data] = 1
+        # Every chunk appears at least thrice. Note! This is probabilistic
+        # but the probably of false failure is < 1e-9
+        for x in range(num_chunks):
+            self.assertGreater(counts[bytes(x)], 3)
+        # check that there are no stray chunks
+        self.assertEqual(len(counts.keys()), num_chunks)
+        # clean up: remove temp files.
+        for c in chunks:
+            os.remove(c)

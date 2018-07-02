@@ -1,6 +1,6 @@
 /*
     This file is part of Leela Zero.
-    Copyright (C) 2017 Gian-Carlo Pascutto
+    Copyright (C) 2017-2018 Gian-Carlo Pascutto
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -27,25 +27,20 @@
 #include <iterator>
 #include <limits>
 #include <numeric>
-#include <random>
 #include <utility>
 #include <vector>
 
 #include "UCTNode.h"
 #include "FastBoard.h"
 #include "FastState.h"
-#include "FullBoard.h"
 #include "GTP.h"
 #include "GameState.h"
-#include "KoState.h"
 #include "Network.h"
-#include "Random.h"
 #include "Utils.h"
 
 using namespace Utils;
 
-UCTNode::UCTNode(int vertex, float score, float init_eval)
-    : m_move(vertex), m_score(score), m_init_eval(init_eval) {
+UCTNode::UCTNode(int vertex, float score) : m_move(vertex), m_score(score) {
 }
 
 bool UCTNode::first_visit() const {
@@ -56,11 +51,12 @@ SMP::Mutex& UCTNode::get_mutex() {
     return m_nodemutex;
 }
 
-bool UCTNode::create_children(std::atomic<int> & nodecount,
-                              GameState & state,
-                              float & eval) {
+bool UCTNode::create_children(std::atomic<int>& nodecount,
+                              GameState& state,
+                              float& eval,
+                              float min_psa_ratio) {
     // check whether somebody beat us to it (atomic)
-    if (has_children()) {
+    if (!expandable(min_psa_ratio)) {
         return false;
     }
     // acquire the lock
@@ -70,7 +66,7 @@ bool UCTNode::create_children(std::atomic<int> & nodecount,
         return false;
     }
     // check whether somebody beat us to it (after taking the lock)
-    if (has_children()) {
+    if (!expandable(min_psa_ratio)) {
         return false;
     }
     // Someone else is running the expansion
@@ -82,43 +78,54 @@ bool UCTNode::create_children(std::atomic<int> & nodecount,
     lock.unlock();
 
     const auto raw_netlist = Network::get_scored_moves(
-        &state, Network::Ensemble::RANDOM_ROTATION);
+        &state, Network::Ensemble::RANDOM_SYMMETRY);
 
     // DCNN returns winrate as side to move
-    auto net_eval = raw_netlist.second;
+    m_net_eval = raw_netlist.winrate;
     const auto to_move = state.board.get_to_move();
     // our search functions evaluate from black's point of view
     if (state.board.white_to_move()) {
-        net_eval = 1.0f - net_eval;
+        m_net_eval = 1.0f - m_net_eval;
     }
-    eval = net_eval;
+    eval = m_net_eval;
 
-    std::vector<Network::scored_node> nodelist;
+    std::vector<Network::ScoreVertexPair> nodelist;
 
     auto legal_sum = 0.0f;
-    for (const auto& node : raw_netlist.first) {
-        auto vertex = node.second;
+    for (auto i = 0; i < BOARD_SQUARES; i++) {
+        const auto x = i % BOARD_SIZE;
+        const auto y = i / BOARD_SIZE;
+        const auto vertex = state.board.get_vertex(x, y);
         if (state.is_move_legal(to_move, vertex)) {
-            nodelist.emplace_back(node);
-            legal_sum += node.first;
+            nodelist.emplace_back(raw_netlist.policy[i], vertex);
+            legal_sum += raw_netlist.policy[i];
         }
     }
+    nodelist.emplace_back(raw_netlist.policy_pass, FastBoard::PASS);
+    legal_sum += raw_netlist.policy_pass;
 
-    // If the sum is 0 or a denormal, then don't try to normalize.
     if (legal_sum > std::numeric_limits<float>::min()) {
         // re-normalize after removing illegal moves.
         for (auto& node : nodelist) {
             node.first /= legal_sum;
         }
+    } else {
+        // This can happen with new randomized nets.
+        auto uniform_prob = 1.0f / nodelist.size();
+        for (auto& node : nodelist) {
+            node.first = uniform_prob;
+        }
     }
 
-    link_nodelist(nodecount, nodelist, net_eval);
+    link_nodelist(nodecount, nodelist, min_psa_ratio);
     return true;
 }
 
-void UCTNode::link_nodelist(std::atomic<int> & nodecount,
-                            std::vector<Network::scored_node> & nodelist,
-                            float init_eval) {
+void UCTNode::link_nodelist(std::atomic<int>& nodecount,
+                            std::vector<Network::ScoreVertexPair>& nodelist,
+                            float min_psa_ratio) {
+    assert(min_psa_ratio < m_min_psa_ratio_children);
+
     if (nodelist.empty()) {
         return;
     }
@@ -128,112 +135,37 @@ void UCTNode::link_nodelist(std::atomic<int> & nodecount,
 
     LOCK(get_mutex(), lock);
 
-    m_children.reserve(nodelist.size());
-    for (const auto& node : nodelist) {
-        m_children.emplace_back(
-            std::make_unique<UCTNode>(node.second, node.first, init_eval)
+    const auto max_psa = nodelist[0].first;
+    const auto old_min_psa = max_psa * m_min_psa_ratio_children;
+    const auto new_min_psa = max_psa * min_psa_ratio;
+    if (new_min_psa > 0.0f) {
+        m_children.reserve(
+            std::count_if(cbegin(nodelist), cend(nodelist),
+                [=](const auto& node) { return node.first >= new_min_psa; }
+            )
         );
+    } else {
+        m_children.reserve(nodelist.size());
     }
 
-    nodecount += m_children.size();
-    m_has_children = true;
-}
-
-void UCTNode::kill_superkos(const KoState& state) {
-    for (auto& child : m_children) {
-        auto move = child->get_move();
-        if (move != FastBoard::PASS) {
-            KoState mystate = state;
-            mystate.play_move(move);
-
-            if (mystate.superko()) {
-                // Don't delete nodes for now, just mark them invalid.
-                child->invalidate();
-            }
+    auto skipped_children = false;
+    for (const auto& node : nodelist) {
+        if (node.first < new_min_psa) {
+            skipped_children = true;
+        } else if (node.first < old_min_psa) {
+            m_children.emplace_back(node.second, node.first);
+            ++nodecount;
         }
     }
 
-    // Now do the actual deletion.
-    m_children.erase(
-        std::remove_if(begin(m_children), end(m_children),
-                       [](const auto &child) { return !child->valid(); }),
-        end(m_children)
-    );
+    m_min_psa_ratio_children = skipped_children ? min_psa_ratio : 0.0f;
+    m_is_expanding = false;
 }
 
-float UCTNode::eval_state(GameState& state) {
-    auto raw_netlist = Network::get_scored_moves(
-        &state, Network::Ensemble::RANDOM_ROTATION, -1, true);
-
-    // DCNN returns winrate as side to move
-    auto net_eval = raw_netlist.second;
-
-    // But we score from black's point of view
-    if (state.board.white_to_move()) {
-        net_eval = 1.0f - net_eval;
-    }
-
-    return net_eval;
+const std::vector<UCTNodePointer>& UCTNode::get_children() const {
+    return m_children;
 }
 
-void UCTNode::dirichlet_noise(float epsilon, float alpha) {
-    auto child_cnt = m_children.size();
-
-    auto dirichlet_vector = std::vector<float>{};
-    std::gamma_distribution<float> gamma(alpha, 1.0f);
-    for (size_t i = 0; i < child_cnt; i++) {
-        dirichlet_vector.emplace_back(gamma(Random::get_Rng()));
-    }
-
-    auto sample_sum = std::accumulate(begin(dirichlet_vector),
-                                      end(dirichlet_vector), 0.0f);
-
-    // If the noise vector sums to 0 or a denormal, then don't try to
-    // normalize.
-    if (sample_sum < std::numeric_limits<float>::min()) {
-        return;
-    }
-
-    for (auto& v: dirichlet_vector) {
-        v /= sample_sum;
-    }
-
-    child_cnt = 0;
-    for (auto& child : m_children) {
-        auto score = child->get_score();
-        auto eta_a = dirichlet_vector[child_cnt++];
-        score = score * (1 - epsilon) + epsilon * eta_a;
-        child->set_score(score);
-    }
-}
-
-void UCTNode::randomize_first_proportionally() {
-    auto accum = std::uint64_t{0};
-    auto accum_vector = std::vector<decltype(accum)>{};
-    for (const auto& child : m_children) {
-        accum += child->get_visits();
-        accum_vector.emplace_back(accum);
-    }
-
-    auto pick = Random::get_Rng().randuint64(accum);
-    auto index = size_t{0};
-    for (size_t i = 0; i < accum_vector.size(); i++) {
-        if (pick < accum_vector[i]) {
-            index = i;
-            break;
-        }
-    }
-
-    // Take the early out
-    if (index == 0) {
-        return;
-    }
-
-    assert(m_children.size() >= index);
-
-    // Now swap the child at index with the first child
-    std::iter_swap(begin(m_children), begin(m_children) + index);
-}
 
 int UCTNode::get_move() const {
     return m_move;
@@ -253,7 +185,11 @@ void UCTNode::update(float eval) {
 }
 
 bool UCTNode::has_children() const {
-    return m_has_children;
+    return m_min_psa_ratio_children <= 1.0f;
+}
+
+bool UCTNode::expandable(const float min_psa_ratio) const {
+    return min_psa_ratio < m_min_psa_ratio_children;
 }
 
 float UCTNode::get_score() const {
@@ -274,25 +210,23 @@ float UCTNode::get_eval(int tomove) const {
     // to return a consistent result to the caller by caching the values.
     auto virtual_loss = int{m_virtual_loss};
     auto visits = get_visits() + virtual_loss;
-    if (visits > 0) {
-        auto blackeval = get_blackevals();
-        if (tomove == FastBoard::WHITE) {
-            blackeval += static_cast<double>(virtual_loss);
-        }
-        auto score = static_cast<float>(blackeval / (double)visits);
-        if (tomove == FastBoard::WHITE) {
-            score = 1.0f - score;
-        }
-        return score;
-    } else {
-        // If a node has not been visited yet,
-        // the eval is that of the parent.
-        auto eval = m_init_eval;
-        if (tomove == FastBoard::WHITE) {
-            eval = 1.0f - eval;
-        }
-        return eval;
+    assert(visits > 0);
+    auto blackeval = get_blackevals();
+    if (tomove == FastBoard::WHITE) {
+        blackeval += static_cast<double>(virtual_loss);
     }
+    auto score = static_cast<float>(blackeval / double(visits));
+    if (tomove == FastBoard::WHITE) {
+        score = 1.0f - score;
+    }
+    return score;
+}
+
+float UCTNode::get_net_eval(int tomove) const {
+    if (tomove == FastBoard::WHITE) {
+        return 1.0f - m_net_eval;
+    }
+    return m_net_eval;
 }
 
 double UCTNode::get_blackevals() const {
@@ -300,75 +234,82 @@ double UCTNode::get_blackevals() const {
 }
 
 void UCTNode::accumulate_eval(float eval) {
-    atomic_add(m_blackevals, (double)eval);
+    atomic_add(m_blackevals, double(eval));
 }
 
-UCTNode* UCTNode::uct_select_child(int color) {
-    UCTNode* best = nullptr;
-    auto best_value = -1000.0f;
-
+UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
     LOCK(get_mutex(), lock);
 
-    // Count parentvisits.
-    // We do this manually to avoid issues with transpositions.
+    // Count parentvisits manually to avoid issues with transpositions.
     auto total_visited_policy = 0.0f;
     auto parentvisits = size_t{0};
     for (const auto& child : m_children) {
-        if (child->valid()) {
-            parentvisits += child->get_visits();
-            if (child->get_visits() > 0) {
-                total_visited_policy += child->get_score();
+        if (child.valid()) {
+            parentvisits += child.get_visits();
+            if (child.get_visits() > 0) {
+                total_visited_policy += child.get_score();
             }
         }
     }
 
-    auto numerator = static_cast<float>(std::sqrt((double)parentvisits));
-    auto fpu_reduction = cfg_fpu_reduction * std::sqrt(total_visited_policy);
+    auto numerator = std::sqrt(double(parentvisits));
+    auto fpu_reduction = 0.0f;
+    // Lower the expected eval for moves that are likely not the best.
+    // Do not do this if we have introduced noise at this node exactly
+    // to explore more.
+    if (!is_root || !cfg_noise) {
+        fpu_reduction = cfg_fpu_reduction * std::sqrt(total_visited_policy);
+    }
+    // Estimated eval for unknown nodes = original parent NN eval - reduction
+    auto fpu_eval = get_net_eval(color) - fpu_reduction;
 
-    for (const auto& child : m_children) {
-        if (!child->valid()) {
+    auto best = static_cast<UCTNodePointer*>(nullptr);
+    auto best_value = std::numeric_limits<double>::lowest();
+
+    for (auto& child : m_children) {
+        if (!child.active()) {
             continue;
         }
 
-        auto winrate = child->get_eval(color);
-        if (child->get_visits() == 0) {
-            // First play urgency
-            winrate -= fpu_reduction;
+        auto winrate = fpu_eval;
+        if (child.get_visits() > 0) {
+            winrate = child.get_eval(color);
         }
-        auto psa = child->get_score();
-        auto denom = 1.0f + child->get_visits();
+        auto psa = child.get_score();
+        auto denom = 1.0 + child.get_visits();
         auto puct = cfg_puct * psa * (numerator / denom);
         auto value = winrate + puct;
-        assert(value > -1000.0f);
+        assert(value > std::numeric_limits<double>::lowest());
 
         if (value > best_value) {
             best_value = value;
-            best = child.get();
+            best = &child;
         }
     }
 
     assert(best != nullptr);
-    return best;
+    best->inflate();
+    return best->get();
 }
 
-class NodeComp : public std::binary_function<UCTNode::node_ptr_t&,
-                                             UCTNode::node_ptr_t&, bool> {
+class NodeComp : public std::binary_function<UCTNodePointer&,
+                                             UCTNodePointer&, bool> {
 public:
     NodeComp(int color) : m_color(color) {};
-    bool operator()(const UCTNode::node_ptr_t& a,
-                    const UCTNode::node_ptr_t& b) {
+    bool operator()(const UCTNodePointer& a,
+                    const UCTNodePointer& b) {
         // if visits are not same, sort on visits
-        if (a->get_visits() != b->get_visits()) {
-            return a->get_visits() < b->get_visits();
+        if (a.get_visits() != b.get_visits()) {
+            return a.get_visits() < b.get_visits();
         }
 
         // neither has visits, sort on prior score
-        if (a->get_visits() == 0) {
-            return a->get_score() < b->get_score();
+        if (a.get_visits() == 0) {
+            return a.get_score() < b.get_score();
         }
 
         // both have same non-zero number of visits
-        return a->get_eval(m_color) < b->get_eval(m_color);
+        return a.get_eval(m_color) < b.get_eval(m_color);
     }
 private:
     int m_color;
@@ -383,64 +324,37 @@ UCTNode& UCTNode::get_best_root_child(int color) {
     LOCK(get_mutex(), lock);
     assert(!m_children.empty());
 
-    return *(std::max_element(begin(m_children), end(m_children),
-                              NodeComp(color))->get());
-}
-
-UCTNode* UCTNode::get_first_child() const {
-    if (m_children.empty()) {
-        return nullptr;
-    }
-    return m_children.front().get();
-}
-
-const std::vector<UCTNode::node_ptr_t>& UCTNode::get_children() const {
-    return m_children;
+    auto ret = std::max_element(begin(m_children), end(m_children),
+                                NodeComp(color));
+    ret->inflate();
+    return *(ret->get());
 }
 
 size_t UCTNode::count_nodes() const {
     auto nodecount = size_t{0};
-    if (m_has_children) {
-        nodecount += m_children.size();
-        for (auto& child : m_children) {
+    nodecount += m_children.size();
+    for (auto& child : m_children) {
+        if (child.get_visits() > 0) {
             nodecount += child->count_nodes();
         }
     }
     return nodecount;
 }
 
-// Used to find new root in UCTSearch
-UCTNode::node_ptr_t UCTNode::find_child(const int move) {
-    if (m_has_children) {
-        for (auto& child : m_children) {
-            if (child->get_move() == move) {
-                return std::move(child);
-            }
-        }
-    }
-
-    // Can happen if we resigned or children are not expanded
-    return nullptr;
-}
-
-UCTNode* UCTNode::get_nopass_child(FastState& state) const {
-    for (const auto& child : m_children) {
-        /* If we prevent the engine from passing, we must bail out when
-           we only have unreasonable moves to pick, like filling eyes.
-           Note that this knowledge isn't required by the engine,
-           we require it because we're overruling its moves. */
-        if (child->m_move != FastBoard::PASS
-            && !state.board.is_eye(state.get_to_move(), child->m_move)) {
-            return child.get();
-        }
-    }
-    return nullptr;
-}
-
 void UCTNode::invalidate() {
-    m_valid = false;
+    m_status = INVALID;
+}
+
+void UCTNode::set_active(const bool active) {
+    if (valid()) {
+        m_status = active ? ACTIVE : PRUNED;
+    }
 }
 
 bool UCTNode::valid() const {
-    return m_valid;
+    return m_status != INVALID;
+}
+
+bool UCTNode::active() const {
+    return m_status == ACTIVE;
 }
