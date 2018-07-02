@@ -67,12 +67,16 @@ static std::vector<std::vector<float>> conv_weights;
 static std::vector<std::vector<float>> conv_biases;
 static std::vector<std::vector<float>> batchnorm_means;
 static std::vector<std::vector<float>> batchnorm_stddivs;
+static std::vector<std::vector<float>> batchnorm_gamma;
+static std::vector<std::vector<float>> batchnorm_beta;
 
 // Policy head
 static std::vector<float> conv_pol_w;
 static std::vector<float> conv_pol_b;
 static std::array<float, 2> bn_pol_w1;
 static std::array<float, 2> bn_pol_w2;
+static std::array<float, 2> bn_pol_gamma;
+static std::array<float, 2> bn_pol_beta;
 
 static std::array<float, (BOARD_SQUARES + 1) * BOARD_SQUARES * 2> ip_pol_w;
 static std::array<float, BOARD_SQUARES + 1> ip_pol_b;
@@ -82,6 +86,8 @@ static std::vector<float> conv_val_w;
 static std::vector<float> conv_val_b;
 static std::array<float, 1> bn_val_w1;
 static std::array<float, 1> bn_val_w2;
+static std::array<float, 1> bn_val_gamma;
+static std::array<float, 1> bn_val_beta;
 
 static std::array<float, BOARD_SQUARES * 256> ip1_val_w;
 static std::array<float, 256> ip1_val_b;
@@ -220,12 +226,12 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     }
     // 1 format id, 1 input layer (4 x weights), 14 ending weights,
     // the rest are residuals, every residual has 8 x weight lines
-    auto residual_blocks = linecount - (1 + 4 + 14);
-    if (residual_blocks % 8 != 0) {
+    auto residual_blocks = linecount - (1 + 6 + 18);
+    if (residual_blocks % 12 != 0) {
         myprintf("\nInconsistent number of weights in the file.\n");
         return {0, 0};
     }
-    residual_blocks /= 8;
+    residual_blocks /= 12;
     myprintf("%d blocks.\n", residual_blocks);
 
     // Re-read file and process
@@ -236,7 +242,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     std::getline(wtfile, line);
 
     const auto plain_conv_layers = 1 + (residual_blocks * 2);
-    const auto plain_conv_wts = plain_conv_layers * 4;
+    const auto plain_conv_wts = plain_conv_layers * 6;
     linecount = 0;
     while (std::getline(wtfile, line)) {
         std::vector<float> weights;
@@ -249,17 +255,21 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
             return {0,0};
         }
         if (linecount < plain_conv_wts) {
-            if (linecount % 4 == 0) {
+            if (linecount % 6 == 0) {
                 conv_weights.emplace_back(weights);
-            } else if (linecount % 4 == 1) {
+            } else if (linecount % 6 == 1) {
                 // Redundant in our model, but they encode the
                 // number of outputs so we have to read them in.
                 conv_biases.emplace_back(weights);
-            } else if (linecount % 4 == 2) {
+            } else if (linecount % 6 == 2) {
                 batchnorm_means.emplace_back(weights);
-            } else if (linecount % 4 == 3) {
+            } else if (linecount % 6 == 3) {
                 process_bn_var(weights);
                 batchnorm_stddivs.emplace_back(weights);
+            } else if (linecount % 6 == 4) {
+                batchnorm_gamma.emplace_back(weights);
+            } else if (linecount % 6 == 5) {
+                batchnorm_beta.emplace_back(weights);
             }
         } else if (linecount == plain_conv_wts) {
             conv_pol_w = std::move(weights);
@@ -271,25 +281,33 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
             process_bn_var(weights);
             std::copy(cbegin(weights), cend(weights), begin(bn_pol_w2));
         } else if (linecount == plain_conv_wts + 4) {
-            std::copy(cbegin(weights), cend(weights), begin(ip_pol_w));
+            std::copy(cbegin(weights), cend(weights), begin(bn_pol_gamma));
         } else if (linecount == plain_conv_wts + 5) {
-            std::copy(cbegin(weights), cend(weights), begin(ip_pol_b));
+            std::copy(cbegin(weights), cend(weights), begin(bn_pol_beta));
         } else if (linecount == plain_conv_wts + 6) {
-            conv_val_w = std::move(weights);
+            std::copy(cbegin(weights), cend(weights), begin(ip_pol_w));
         } else if (linecount == plain_conv_wts + 7) {
-            conv_val_b = std::move(weights);
+            std::copy(cbegin(weights), cend(weights), begin(ip_pol_b));
         } else if (linecount == plain_conv_wts + 8) {
-            std::copy(cbegin(weights), cend(weights), begin(bn_val_w1));
+            conv_val_w = std::move(weights);
         } else if (linecount == plain_conv_wts + 9) {
+            conv_val_b = std::move(weights);
+        } else if (linecount == plain_conv_wts + 10) {
+            std::copy(cbegin(weights), cend(weights), begin(bn_val_w1));
+        } else if (linecount == plain_conv_wts + 11) {
             process_bn_var(weights);
             std::copy(cbegin(weights), cend(weights), begin(bn_val_w2));
-        } else if (linecount == plain_conv_wts + 10) {
-            std::copy(cbegin(weights), cend(weights), begin(ip1_val_w));
-        } else if (linecount == plain_conv_wts + 11) {
-            std::copy(cbegin(weights), cend(weights), begin(ip1_val_b));
         } else if (linecount == plain_conv_wts + 12) {
-            std::copy(cbegin(weights), cend(weights), begin(ip2_val_w));
+            std::copy(cbegin(weights), cend(weights), begin(bn_val_gamma));
         } else if (linecount == plain_conv_wts + 13) {
+            std::copy(cbegin(weights), cend(weights), begin(bn_val_beta));
+        } else if (linecount == plain_conv_wts + 14) {
+            std::copy(cbegin(weights), cend(weights), begin(ip1_val_w));
+        } else if (linecount == plain_conv_wts + 15) {
+            std::copy(cbegin(weights), cend(weights), begin(ip1_val_b));
+        } else if (linecount == plain_conv_wts + 16) {
+            std::copy(cbegin(weights), cend(weights), begin(ip2_val_w));
+        } else if (linecount == plain_conv_wts + 17) {
             std::copy(cbegin(weights), cend(weights), begin(ip2_val_b));
         }
         linecount++;
@@ -385,19 +403,19 @@ void Network::initialize() {
     // to separately add the biases.
     for (auto i = size_t{0}; i < conv_biases.size(); i++) {
         for (auto j = size_t{0}; j < batchnorm_means[i].size(); j++) {
-            batchnorm_means[i][j] -= conv_biases[i][j];
-            conv_biases[i][j] = 0.0f;
+            //batchnorm_means[i][j] -= conv_biases[i][j];
+            //conv_biases[i][j] = 0.0f;
         }
     }
 
     for (auto i = size_t{0}; i < bn_val_w1.size(); i++) {
-        bn_val_w1[i] -= conv_val_b[i];
-        conv_val_b[i] = 0.0f;
+        //bn_val_w1[i] -= conv_val_b[i];
+        //conv_val_b[i] = 0.0f;
     }
 
     for (auto i = size_t{0}; i < bn_pol_w1.size(); i++) {
-        bn_pol_w1[i] -= conv_pol_b[i];
-        conv_pol_b[i] = 0.0f;
+        //bn_pol_w1[i] -= conv_pol_b[i];
+        //conv_pol_b[i] = 0.0f;
     }
 
 #ifdef USE_OPENCL
@@ -422,8 +440,9 @@ void Network::initialize() {
 
         // Winograd filter transformation changes filter size to 4x4
         opencl_net->push_input_convolution(WINOGRAD_ALPHA, INPUT_CHANNELS,
-            channels, Upad,
-            batchnorm_means[weight_index], batchnorm_stddivs[weight_index]);
+            channels, Upad, conv_biases[weight_index],
+            batchnorm_means[weight_index], batchnorm_stddivs[weight_index],
+            batchnorm_gamma[weight_index], batchnorm_beta[weight_index]);
         weight_index++;
 
         // residual blocks
@@ -436,11 +455,17 @@ void Network::initialize() {
                                          m_ceil, m_ceil);
             opencl_net->push_residual(WINOGRAD_ALPHA, channels, channels,
                                       Upad1,
+                                      conv_biases[weight_index],
                                       batchnorm_means[weight_index],
                                       batchnorm_stddivs[weight_index],
+                                      batchnorm_gamma[weight_index],
+                                      batchnorm_beta[weight_index],
                                       Upad2,
+                                      conv_biases[weight_index + 1],
                                       batchnorm_means[weight_index + 1],
-                                      batchnorm_stddivs[weight_index + 1]);
+                                      batchnorm_stddivs[weight_index + 1],
+                                      batchnorm_gamma[weight_index + 1],
+                                      batchnorm_beta[weight_index + 1]);
             weight_index += 2;
         }
 
@@ -655,16 +680,16 @@ void Network::winograd_convolve3(const int outputs,
 
 template<unsigned int filter_size>
 void convolve(const size_t outputs,
+              const size_t biases_size,
               const std::vector<float>& input,
               const std::vector<float>& weights,
-              const std::vector<float>& biases,
               std::vector<float>& output) {
     // The size of the board is defined at compile time
     constexpr unsigned int width = BOARD_SIZE;
     constexpr unsigned int height = BOARD_SIZE;
     constexpr auto board_squares = width * height;
     constexpr auto filter_len = filter_size * filter_size;
-    const auto input_channels = weights.size() / (biases.size() * filter_len);
+    const auto input_channels = weights.size() / (biases_size * filter_len);
     const auto filter_dim = filter_len * input_channels;
     assert(outputs * board_squares == output.size());
 
@@ -690,11 +715,12 @@ void convolve(const size_t outputs,
                 &col[0], board_squares,
                 0.0f, &output[0], board_squares);
 
+    /*
     for (unsigned int o = 0; o < outputs; o++) {
         for (unsigned int b = 0; b < board_squares; b++) {
             output[(o * board_squares) + b] += biases[o];
         }
-    }
+    }*/
 }
 
 template<unsigned int inputs,
@@ -731,6 +757,8 @@ void batchnorm(const size_t channels,
                std::vector<float>& data,
                const float* const means,
                const float* const stddivs,
+               const float* const gammas,
+               const float* const betas,
                const float* const eltwise = nullptr)
 {
     const auto lambda_ReLU = [](const auto val) { return (val > 0.0f) ?
@@ -738,20 +766,35 @@ void batchnorm(const size_t channels,
     for (auto c = size_t{0}; c < channels; ++c) {
         const auto mean = means[c];
         const auto scale_stddiv = stddivs[c];
+        const auto gamma = gammas[c];
+        const auto beta = betas[c];
 
         if (eltwise == nullptr) {
             // Classical BN
             const auto arr = &data[c * spatial_size];
             for (auto b = size_t{0}; b < spatial_size; b++) {
-                arr[b] = lambda_ReLU(scale_stddiv * (arr[b] - mean));
+                arr[b] = lambda_ReLU(scale_stddiv * (arr[b] - mean) * gamma + beta);
             }
         } else {
             // BN + residual add
             const auto arr = &data[c * spatial_size];
             const auto res = &eltwise[c * spatial_size];
             for (auto b = size_t{0}; b < spatial_size; b++) {
-                arr[b] = lambda_ReLU((scale_stddiv * (arr[b] - mean)) + res[b]);
+                arr[b] = lambda_ReLU((scale_stddiv * (arr[b] - mean) * gamma + beta) + res[b]);
             }
+        }
+    }
+}
+
+template <size_t spatial_size>
+void add_bias(const size_t channels,
+             std::vector<float>& data,
+             const float* const bias)
+{
+    for (auto c = size_t{0}; c < channels; ++c) {
+        const auto arr = &data[c * spatial_size];
+        for (auto b = size_t{0}; b < spatial_size; b++) {
+            arr[b] += bias[c];
         }
     }
 }
@@ -776,9 +819,8 @@ void Network::forward_cpu(const std::vector<float>& input,
     auto M = std::vector<float>(WINOGRAD_TILE * output_channels * tiles);
 
     winograd_convolve3(output_channels, input, conv_weights[0], V, M, conv_out);
-    batchnorm<BOARD_SQUARES>(output_channels, conv_out,
-                             batchnorm_means[0].data(),
-                             batchnorm_stddivs[0].data());
+    add_bias<BOARD_SQUARES>(output_channels, conv_out, conv_biases[0].data());
+
 
     // Residual tower
     auto conv_in = std::vector<float>(output_channels * width * height);
@@ -786,24 +828,40 @@ void Network::forward_cpu(const std::vector<float>& input,
     for (auto i = size_t{1}; i < conv_weights.size(); i += 2) {
         auto output_channels = conv_biases[i].size();
         std::swap(conv_out, conv_in);
+        res = conv_in;
+        batchnorm<BOARD_SQUARES>(output_channels, conv_in,
+                                 batchnorm_means[i - 1].data(),
+                                 batchnorm_stddivs[i - 1].data(),
+                                 batchnorm_gamma[i - 1].data(),
+                                 batchnorm_beta[i - 1].data());
+
         winograd_convolve3(output_channels, conv_in,
                            conv_weights[i], V, M, conv_out);
-        batchnorm<BOARD_SQUARES>(output_channels, conv_out,
-                                 batchnorm_means[i].data(),
-                                 batchnorm_stddivs[i].data());
+        add_bias<BOARD_SQUARES>(output_channels, conv_out, conv_biases[i].data());
 
         output_channels = conv_biases[i + 1].size();
-        std::swap(conv_in, res);
         std::swap(conv_out, conv_in);
+        batchnorm<BOARD_SQUARES>(output_channels, conv_in,
+                                 batchnorm_means[i].data(),
+                                 batchnorm_stddivs[i].data(),
+                                 batchnorm_gamma[i].data(),
+                                 batchnorm_beta[i].data());
         winograd_convolve3(output_channels, conv_in,
                            conv_weights[i + 1], V, M, conv_out);
-        batchnorm<BOARD_SQUARES>(output_channels, conv_out,
-                                 batchnorm_means[i + 1].data(),
-                                 batchnorm_stddivs[i + 1].data(),
-                                 res.data());
+        add_bias<BOARD_SQUARES>(output_channels, conv_out, conv_biases[i + 1].data());
+
+        for (auto k = size_t{0}; k < conv_out.size(); ++k)
+            conv_out[k] += res[k];
+
     }
-    convolve<1>(OUTPUTS_POLICY, conv_out, conv_pol_w, conv_pol_b, output_pol);
-    convolve<1>(OUTPUTS_VALUE, conv_out, conv_val_w, conv_val_b, output_val);
+    batchnorm<BOARD_SQUARES>(output_channels, conv_out,
+                             batchnorm_means.back().data(),
+                             batchnorm_stddivs.back().data(),
+                             batchnorm_gamma.back().data(),
+                             batchnorm_beta.back().data());
+
+    convolve<1>(OUTPUTS_POLICY, conv_pol_b.size(), conv_out, conv_pol_w, output_pol);
+    convolve<1>(OUTPUTS_VALUE, conv_val_b.size(), conv_out, conv_val_w, output_val);
 }
 
 template<typename T>
@@ -953,10 +1011,14 @@ Network::Netresult Network::get_scored_moves_internal(
         compare_net_outputs(value_data, cpu_value_data);
     }
 #endif
+    add_bias<BOARD_SQUARES>(OUTPUTS_POLICY, policy_data, conv_pol_b.data());
+    add_bias<BOARD_SQUARES>(OUTPUTS_VALUE, value_data, conv_val_b.data());
 
     // Get the moves
     batchnorm<BOARD_SQUARES>(OUTPUTS_POLICY, policy_data,
-        bn_pol_w1.data(), bn_pol_w2.data());
+        bn_pol_w1.data(), bn_pol_w2.data(),
+        bn_pol_gamma.data(), bn_pol_beta.data());
+
     const auto policy_out =
         innerproduct<OUTPUTS_POLICY * BOARD_SQUARES, BOARD_SQUARES + 1, false>(
             policy_data, ip_pol_w, ip_pol_b);
@@ -964,7 +1026,9 @@ Network::Netresult Network::get_scored_moves_internal(
 
     // Now get the score
     batchnorm<BOARD_SQUARES>(OUTPUTS_VALUE, value_data,
-        bn_val_w1.data(), bn_val_w2.data());
+        bn_val_w1.data(), bn_val_w2.data(),
+        bn_val_gamma.data(), bn_val_beta.data());
+
     const auto winrate_data =
         innerproduct<BOARD_SQUARES, 256, true>(value_data, ip1_val_w, ip1_val_b);
     const auto winrate_out =
@@ -1068,25 +1132,24 @@ std::vector<net_t> Network::gather_features(const GameState* const state,
 
     const auto black_it = blacks_move ?
                           begin(input_data) :
-                          begin(input_data) + INPUT_MOVES * BOARD_SQUARES;
+                          begin(input_data) + BOARD_SQUARES;
     const auto white_it = blacks_move ?
-                          begin(input_data) + INPUT_MOVES * BOARD_SQUARES :
+                          begin(input_data) + BOARD_SQUARES :
                           begin(input_data);
-    const auto to_move_it = blacks_move ?
-        begin(input_data) + 2 * INPUT_MOVES * BOARD_SQUARES :
-        begin(input_data) + (2 * INPUT_MOVES + 1) * BOARD_SQUARES;
+    const auto to_move_it = begin(input_data) + 2 * INPUT_MOVES * BOARD_SQUARES;
 
     const auto moves = std::min<size_t>(state->get_movenum() + 1, INPUT_MOVES);
     // Go back in time, fill history boards
     for (auto h = size_t{0}; h < moves; h++) {
         // collect white, black occupation planes
         fill_input_plane_pair(state->get_past_board(h),
-                              black_it + h * BOARD_SQUARES,
-                              white_it + h * BOARD_SQUARES,
+                              black_it + h * BOARD_SQUARES * 2,
+                              white_it + h * BOARD_SQUARES * 2,
                               symmetry);
     }
 
-    std::fill(to_move_it, to_move_it + BOARD_SQUARES, net_t(true));
+    if (blacks_move)
+        std::fill(to_move_it, to_move_it + BOARD_SQUARES, net_t(true));
 
     return input_data;
 }

@@ -17,7 +17,7 @@ cmake_minimum_required(VERSION 3.1)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
 project(leelaz)
-add_subdirectory(gtest EXCLUDE_FROM_ALL) # We don't want to install gtest, exclude it from `all`
+#add_subdirectory(gtest EXCLUDE_FROM_ALL) # We don't want to install gtest, exclude it from `all`
 
 # Required Packages
 set(Boost_MIN_VERSION "1.58.0")
@@ -123,15 +123,15 @@ else()
 endif()
 
 # Google Test below
-file(GLOB tests_SRC "${SrcPath}/tests/*.cpp")
+#file(GLOB tests_SRC "${SrcPath}/tests/*.cpp")
 
-add_executable(tests ${tests_SRC} $<TARGET_OBJECTS:objs>)
-if(GccSpecificFlags)
-  target_compile_options(tests PRIVATE "-Wno-unused-variable")
-endif()
+#add_executable(tests ${tests_SRC} $<TARGET_OBJECTS:objs>)
+#if(GccSpecificFlags)
+#  target_compile_options(tests PRIVATE "-Wno-unused-variable")
+#endif()
 
-target_link_libraries(tests ${Boost_LIBRARIES})
-target_link_libraries(tests ${BLAS_LIBRARIES})
-target_link_libraries(tests ${OpenCL_LIBRARIES})
-target_link_libraries(tests ${ZLIB_LIBRARIES})
-target_link_libraries(tests gtest_main ${CMAKE_THREAD_LIBS_INIT})
+#target_link_libraries(tests ${Boost_LIBRARIES})
+#target_link_libraries(tests ${BLAS_LIBRARIES})
+#target_link_libraries(tests ${OpenCL_LIBRARIES})
+#target_link_libraries(tests ${ZLIB_LIBRARIES})
+#target_link_libraries(tests gtest_main ${CMAKE_THREAD_LIBS_INIT})
