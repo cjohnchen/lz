@@ -203,10 +203,10 @@ void adjust_up_komi(GameState& root_state, float factor) {
 
 void adjust_down_komi(GameState& root_state, float factor) {
 	auto komi = root_state.m_komi;
-	root_state.m_komi = 7.5f;
+	root_state.m_komi = 0.0f;
 	auto net_eval = Network::get_scored_moves(&root_state, Network::Ensemble::AVERAGE, 8, true).winrate;
 	if (net_eval * factor < cfg_mid_wr) {
-		binary_search_komi(root_state, factor, komi, 7.5f, 8);
+		binary_search_komi(root_state, factor, komi, 0.0f, 8);
 	}
 }
 
@@ -217,7 +217,7 @@ void adjust_komi(GameState& root_state, float root_eval) {
             adjust_up_komi(root_state, root_eval / net_eval);
         }
         else {
-            if (root_state.m_komi != 7.5f && root_eval > cfg_max_wr) {
+            if (root_state.m_komi != 0.0f && root_eval > cfg_max_wr) {
                 auto net_eval = Network::get_scored_moves(&root_state, Network::Ensemble::AVERAGE, 8, true).winrate;
                 adjust_down_komi(root_state, root_eval / net_eval);
             }
