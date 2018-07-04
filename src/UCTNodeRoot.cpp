@@ -194,34 +194,32 @@ void binary_search_komi(GameState& root_state, float factor, float high, float l
 
 void adjust_up_komi(GameState& root_state, float factor) {
 	float net_eval;
+    int steps = 8;
 	do {
 		root_state.m_komi = 2.0f * root_state.m_komi;
 		net_eval = Network::get_scored_moves(&root_state, Network::Ensemble::AVERAGE, 8, true).winrate;
-	} while (net_eval * factor < cfg_mid_wr);
-	binary_search_komi(root_state, factor, root_state.m_komi, root_state.m_komi / 2.0, 8);
+	} while (net_eval * factor < cfg_mid_wr && --steps > 0);
+	binary_search_komi(root_state, factor, root_state.m_komi, root_state.m_komi / 2.0, steps);
 }
 
 void adjust_down_komi(GameState& root_state, float factor) {
 	auto komi = root_state.m_komi;
-	root_state.m_komi = 0.0f;
+	root_state.m_komi = -7.5f;
 	auto net_eval = Network::get_scored_moves(&root_state, Network::Ensemble::AVERAGE, 8, true).winrate;
-	if (net_eval * factor < cfg_mid_wr) {
-		binary_search_komi(root_state, factor, komi, 0.0f, 8);
+	while (net_eval * factor >= cfg_mid_wr) {
+
 	}
+    binary_search_komi(root_state, factor, komi, root_state.m_komi, 8);
 }
 
 void adjust_komi(GameState& root_state, float root_eval) {
-    if (root_state.get_to_move() == FastBoard::WHITE) {
-        if (root_eval < cfg_min_wr) {
-            auto net_eval = Network::get_scored_moves(&root_state, Network::Ensemble::AVERAGE, 8, true).winrate;
-            adjust_up_komi(root_state, root_eval / net_eval);
-        }
-        else {
-            if (root_state.m_komi != 0.0f && root_eval > cfg_max_wr) {
-                auto net_eval = Network::get_scored_moves(&root_state, Network::Ensemble::AVERAGE, 8, true).winrate;
-                adjust_down_komi(root_state, root_eval / net_eval);
-            }
-        }
+    if (root_eval < cfg_min_wr) {
+        auto net_eval = Network::get_scored_moves(&root_state, Network::Ensemble::AVERAGE, 8, true).winrate;
+        adjust_up_komi(root_state, root_eval / net_eval);
+    }
+    if (root_eval > cfg_max_wr) {
+        auto net_eval = Network::get_scored_moves(&root_state, Network::Ensemble::AVERAGE, 8, true).winrate;
+        adjust_down_komi(root_state, root_eval / net_eval);
     }
 }
 
