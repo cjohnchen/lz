@@ -84,7 +84,7 @@ bool UCTSearch::advance_to_new_rootstate() {
         return false;
     }
 
-    if (m_rootstate.get_komi() != m_last_rootstate->get_komi()) {
+    if (m_rootstate.get_komi() != m_last_rootstate->get_opp_komi() || m_rootstate.get_opp_komi() != m_last_rootstate->get_komi()) {
         return false;
     }
 
@@ -289,7 +289,6 @@ void UCTSearch::output_analysis(FastState & state, UCTNode & parent) {
                          static_cast<int>(node->get_pure_eval(color) * 10000) : 0;
         // Store data in array
         sortable_data.emplace_back(move, node->get_visits(), move_eval, pv);
-
     }
     // Sort array to decide order
     std::stable_sort(rbegin(sortable_data), rend(sortable_data));

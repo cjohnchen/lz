@@ -30,6 +30,7 @@
 #include "FastBoard.h"
 #include "FastState.h"
 #include "KoState.h"
+#include "NNCache.h"
 #include "Random.h"
 #include "UCTNode.h"
 #include "Utils.h"
@@ -177,6 +178,113 @@ void UCTNode::inflate_all_children() {
     }
 }
 
+const int cfg_steps = 12;
+
+float white_net_eval(GameState root_state) {
+    auto net_eval = Network::get_scored_moves(&root_state, Network::Ensemble::AVERAGE, 8, true).winrate;
+    if (root_state.get_to_move() == FastBoard::WHITE) {
+        return net_eval;
+    }
+    else {
+        return 1.0 - net_eval;
+    }
+}
+// all net_eval below are white's
+
+void binary_search_komi(GameState& root_state, float high, float low, int steps) {
+    while (steps-- > 0) {
+        root_state.m_komi = (high + low) / 2.0;
+        if (white_net_eval(root_state) > cfg_mid_wr) {
+            high = root_state.m_komi;
+        }
+        else {
+            low = root_state.m_komi;
+        }
+    }
+    if (std::min(abs(high + 7.5), abs(high - 7.5)) < std::min(abs(low + 7.5), abs(low - 7.5))) {
+        root_state.m_komi = high;
+    }
+    else {
+        root_state.m_komi = low;
+    }
+}
+
+void adjust_up_komi(GameState& root_state) {
+	float net_eval;
+    auto komi = root_state.m_komi;
+    if (komi < -7.5) {
+        root_state.m_komi = -7.5;
+        net_eval = white_net_eval(root_state);
+        if (net_eval > cfg_max_wr) {
+            binary_search_komi(root_state, -7.5f, komi, cfg_steps);
+            return;
+        }
+        else if (net_eval >= cfg_min_wr) {
+            return;
+        }
+    }
+    if (komi < 7.5) {
+        root_state.m_komi = 7.5;
+        net_eval = white_net_eval(root_state);
+        if (net_eval > cfg_max_wr) {
+            binary_search_komi(root_state, 7.5f, -7.5f, cfg_steps);
+            return;
+        }
+        else if (net_eval >= cfg_min_wr) {
+            return;
+        }
+    }
+    int steps = cfg_steps;
+	do {
+		root_state.m_komi = 2.0f * root_state.m_komi;
+        net_eval = white_net_eval(root_state);
+	} while (net_eval < cfg_mid_wr && --steps > 0);
+	binary_search_komi(root_state, root_state.m_komi, root_state.m_komi / 2.0, steps);
+}
+
+void adjust_down_komi(GameState& root_state) {
+    float net_eval;
+    auto komi = root_state.m_komi;
+    if (komi > 7.5) {
+        root_state.m_komi = 7.5;
+        net_eval = white_net_eval(root_state);
+        if (net_eval < cfg_min_wr) {
+            binary_search_komi(root_state, komi, 7.5f, cfg_steps);
+            return;
+        }
+        else if (net_eval <= cfg_max_wr) {
+            return;
+        }
+    }
+    if (komi > -7.5) {
+        root_state.m_komi = -7.5;
+        net_eval = white_net_eval(root_state);
+        if (net_eval < cfg_min_wr) {
+            binary_search_komi(root_state, 7.5f, -7.5f, cfg_steps);
+            return;
+        }
+        else if (net_eval <= cfg_max_wr) {
+            return;
+        }
+    }
+    int steps = cfg_steps;
+    do {
+        root_state.m_komi = 2.0f * root_state.m_komi;
+        net_eval = white_net_eval(root_state);
+    } while (net_eval > cfg_mid_wr && --steps > 0);
+    binary_search_komi(root_state, root_state.m_komi / 2.0, root_state.m_komi, steps);
+}
+
+void adjust_komi(GameState& root_state) {
+    auto net_eval = white_net_eval(root_state);
+    if (net_eval < cfg_min_wr) {
+        adjust_up_komi(root_state);
+    } 
+    else if (net_eval > cfg_max_wr) {
+        adjust_down_komi(root_state);
+    }
+}
+
 void UCTNode::prepare_root_node(int color,
                                 std::atomic<int>& nodes,
                                 GameState& root_state) {
@@ -191,7 +299,17 @@ void UCTNode::prepare_root_node(int color,
         update(root_eval);
         root_eval = (color == FastBoard::BLACK ? root_eval : 1.0f - root_eval);
     }
-    Utils::myprintf("NN eval=%f\n", root_eval);
+    auto komi = root_state.m_komi;
+    adjust_komi(root_state);
+    if (komi != root_state.m_komi) {
+        NNCache::get_NNCache().clear_cache();
+        m_visits = 0;
+        m_blackevals = 0.0;
+        m_min_psa_ratio_children = 2.0;
+        m_children.clear();
+        create_children(nodes, root_state, root_eval);
+        root_eval = (color == FastBoard::BLACK ? root_eval : 1.0f - root_eval);
+    }
 
     // There are a lot of special cases where code assumes
     // all children of the root are inflated, so do that.
@@ -200,6 +318,24 @@ void UCTNode::prepare_root_node(int color,
     // Remove illegal moves, so the root move list is correct.
     // This also removes a lot of special cases.
     kill_superkos(root_state);
+
+    komi = root_state.m_opp_komi;
+    if (root_state.m_komi == 7.5 || root_state.m_komi == -7.5) {
+        root_state.m_opp_komi = root_state.m_komi;
+    }
+    else {
+        GameState tmpstate = root_state;
+        tmpstate.play_move(get_first_child()->get_move());
+        adjust_komi(tmpstate);
+        root_state.m_opp_komi = tmpstate.m_komi;
+    }
+    if (komi != root_state.m_opp_komi) {
+        NNCache::get_NNCache().clear_cache();
+    }
+
+    Utils::myprintf("NN eval=%f\n", root_eval);
+    Utils::myprintf("komi=%f\n", root_state.m_komi);
+    Utils::myprintf("opp_komi=%f\n", root_state.m_opp_komi);
 
     if (cfg_noise) {
         // Adjust the Dirichlet noise's alpha constant to the board size
