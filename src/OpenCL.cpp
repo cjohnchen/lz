@@ -270,8 +270,12 @@ __kernel void out_transform_fused_bn(__global const net_t * restrict M,
                                      const int K,
                                      const int Kpad, const int Ppad,
                                      __global const net_t * restrict residual,
+                                     __constant const net_t * restrict biases,
                                      __constant const net_t * restrict means,
-                                     __constant const net_t * restrict stddivs) {
+                                     __constant const net_t * restrict stddivs,
+                                     __constant const net_t * restrict gammas,
+                                     __constant const net_t * restrict betas,
+                                     __global net_t * restrict Y2) {
     const int W = BOARD_SIZE;
     const int H = BOARD_SIZE;
     const int WTILES = (W + 1) / 2;
@@ -291,8 +295,11 @@ __kernel void out_transform_fused_bn(__global const net_t * restrict M,
         float o[4];
         __out_transform_eq(M, o, Kpad, Ppad, block_x, block_y);
 
+        const float bias = vload_net_t(k, biases);
         const float mean = vload_net_t(k, means);
         const float scale_stddiv = vload_net_t(k, stddivs);
+        const float gamma = vload_net_t(k, gammas);
+        const float beta = vload_net_t(k, betas);
 
         const bool pred[4] = { 1, x+1 < W, y+1 < H, x+1 < W & y+1 < H};
 
@@ -300,10 +307,16 @@ __kernel void out_transform_fused_bn(__global const net_t * restrict M,
 
         for (int i = 0; i < 4; i++) {
             if (pred[i]) {
-                o[i] = scale_stddiv * (o[i] - mean);
+                o[i] += bias;
                 if (residual) {
                     o[i] += vload_net_t(kHW + a[i], residual);
                 }
+
+                if (Y2) {
+                    vstore_net_t(o[i], kHW + a[i], Y2);
+                }
+
+                o[i] = scale_stddiv * (o[i] - mean) * gamma + beta;
                 o[i] = o[i] > 0 ? o[i] : 0.0f;
                 vstore_net_t(o[i], kHW + a[i], Y);
             }
@@ -318,9 +331,13 @@ __kernel void out_transform_fused_bn_in(
                                      const int K,
                                      const int Kpad, const int Ppad, const int Cpad,
                                      __global const net_t * restrict residual,
+                                     __constant const net_t * restrict biases,
                                      __constant const net_t * restrict means,
                                      __constant const net_t * restrict stddivs,
-                                     __local float * ybuf) {
+                                     __constant const net_t * restrict gammas,
+                                     __constant const net_t * restrict betas,
+                                     __local float * ybuf,
+                                     __global net_t * restrict Y2) {
     const int W = BOARD_SIZE;
     const int H = BOARD_SIZE;
     const int T = W*H;
@@ -352,15 +369,24 @@ __kernel void out_transform_fused_bn_in(
         float o[4];
         __out_transform_eq(M, o, Kpad, Ppad, block_x, block_y);
 
+        const float bias = vload_net_t(k, biases);
         const float mean = vload_net_t(k, means);
         const float scale_stddiv = vload_net_t(k, stddivs);
+        const float gamma = vload_net_t(k, gammas);
+        const float beta = vload_net_t(k, betas);
 
         for (int i = 0; i < 4; i++) {
             if (pred[i]) {
-                o[i] = scale_stddiv * (o[i] - mean);
+                o[i] += bias;
                 if (residual) {
                     o[i] += vload_net_t(kHW + a[i], residual);
                 }
+
+                if (Y2) {
+                    vstore_net_t(o[i], kHW + a[i], Y2);
+                }
+
+                o[i] = scale_stddiv * (o[i] - mean) * gamma + beta;
                 o[i] = o[i] > 0 ? o[i] : 0.0f;
                 ybuf[kg * T + a[i]] = o[i];
                 if (Y) {
@@ -495,6 +521,9 @@ void OpenCL_Network::forward(const std::vector<net_t>& input,
         opencl_thread_data.m_inBuffer2 = cl::Buffer(
             m_opencl.m_context,
             CL_MEM_READ_WRITE, alloc_inSize);
+        opencl_thread_data.m_inBufferNoBN = cl::Buffer(
+            m_opencl.m_context,
+            CL_MEM_READ_WRITE, alloc_inSize);
         opencl_thread_data.m_VBuffer = cl::Buffer(
             m_opencl.m_context,
             CL_MEM_READ_WRITE | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR,
@@ -515,6 +544,7 @@ void OpenCL_Network::forward(const std::vector<net_t>& input,
 
     cl::Buffer & inBuffer = opencl_thread_data.m_inBuffer;
     cl::Buffer & inBuffer2 = opencl_thread_data.m_inBuffer2;
+    cl::Buffer & inBufferNoBN = opencl_thread_data.m_inBufferNoBN;
     cl::Buffer & VBuffer = opencl_thread_data.m_VBuffer;
     cl::Buffer & MBuffer = opencl_thread_data.m_MBuffer;
     cl::CommandQueue & queue = opencl_thread_data.m_commandqueue;
@@ -539,6 +569,7 @@ void OpenCL_Network::forward(const std::vector<net_t>& input,
                      layer.outputs,
                      inBuffer,
                      inBuffer,
+                     &inBufferNoBN,
                      VBuffer,
                      MBuffer,
                      conv_weights,
@@ -551,12 +582,13 @@ void OpenCL_Network::forward(const std::vector<net_t>& input,
             assert(niter != cend(m_layers));
             auto conv1_weights = begin(layer.weights);
             auto bn1_weights   = begin(layer.weights) + 1;
-            auto conv2_weights = begin(layer.weights) + 3;
-            auto bn2_weights   = begin(layer.weights) + 4;
+            auto conv2_weights = begin(layer.weights) + 6;
+            auto bn2_weights   = begin(layer.weights) + 7;
             convolve3(layer.channels,
                       layer.outputs,
                       inBuffer,
                       inBuffer2,
+                      nullptr,
                       VBuffer,
                       MBuffer,
                       conv1_weights,
@@ -572,10 +604,11 @@ void OpenCL_Network::forward(const std::vector<net_t>& input,
                       layer.outputs,
                       inBuffer2,
                       inBuffer,
+                      &inBufferNoBN,
                       VBuffer,
                       MBuffer,
                       conv2_weights,
-                      &inBuffer,
+                      &inBufferNoBN,
                       bn2_weights,
                       true, skip_next_in_trans, true);
             skip_in_trans = skip_next_in_trans;
@@ -625,6 +658,7 @@ void OpenCL_Network::forward(const std::vector<net_t>& input,
 void OpenCL_Network::convolve3(int channels, int outputs,
                               cl::Buffer& bufferIn,
                               cl::Buffer& bufferOut,
+                              cl::Buffer* bufferOutNoBN,
                               cl::Buffer& bufferV,
                               cl::Buffer& bufferM,
                               weight_slice_t weights,
@@ -733,8 +767,16 @@ void OpenCL_Network::convolve3(int channels, int outputs,
             }
             out_transform_bn_in_kernel.setArg(8, bn_weights[0]);
             out_transform_bn_in_kernel.setArg(9, bn_weights[1]);
-            out_transform_bn_in_kernel.setArg(10,
+            out_transform_bn_in_kernel.setArg(10, bn_weights[2]);
+            out_transform_bn_in_kernel.setArg(11, bn_weights[3]);
+            out_transform_bn_in_kernel.setArg(12, bn_weights[4]);
+            out_transform_bn_in_kernel.setArg(13,
                 cl::Local(dim_size * width * height * sizeof(float)));
+            if (bufferOutNoBN) {
+                out_transform_bn_in_kernel.setArg(14, *bufferOutNoBN);
+            } else {
+                out_transform_bn_in_kernel.setArg(14, nullptr);
+            }
 
             queue.enqueueNDRangeKernel(out_transform_bn_in_kernel,
                                        cl::NullRange,
@@ -753,6 +795,14 @@ void OpenCL_Network::convolve3(int channels, int outputs,
             }
             out_transform_bn_kernel.setArg(6, bn_weights[0]);
             out_transform_bn_kernel.setArg(7, bn_weights[1]);
+            out_transform_bn_kernel.setArg(8, bn_weights[2]);
+            out_transform_bn_kernel.setArg(9, bn_weights[3]);
+            out_transform_bn_kernel.setArg(10, bn_weights[4]);
+            if (bufferOutNoBN) {
+                out_transform_bn_kernel.setArg(11, *bufferOutNoBN);
+            } else {
+                out_transform_bn_kernel.setArg(11, nullptr);
+            }
 
             queue.enqueueNDRangeKernel(out_transform_bn_kernel, cl::NullRange,
                                        cl::NDRange(outputs, wgs));
