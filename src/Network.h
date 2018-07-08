@@ -33,6 +33,8 @@
 
 class Network {
 public:
+    static constexpr auto NUM_SYMMETRIES = 8;
+    static constexpr auto IDENTITY_SYMMETRY = 0;
     enum Ensemble {
         DIRECT, RANDOM_SYMMETRY, AVERAGE
     };
@@ -57,7 +59,7 @@ public:
                                       const bool skip_cache = false);
 
     static constexpr auto INPUT_MOVES = 8;
-    static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 2;
+    static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 1;
     static constexpr auto OUTPUTS_POLICY = 2;
     static constexpr auto OUTPUTS_VALUE = 1;
 
@@ -73,11 +75,14 @@ public:
 
     static std::vector<net_t> gather_features(const GameState* const state,
                                               const int symmetry);
+    static std::pair<int, int> get_symmetry(const std::pair<int, int>& vertex,
+                                            const int symmetry,
+                                            const int board_size = BOARD_SIZE);
 private:
     static std::pair<int, int> load_v1_network(std::istream& wtfile);
     static std::pair<int, int> load_network_file(const std::string& filename);
     static void process_bn_var(std::vector<float>& weights,
-                               const float epsilon = 1e-5f);
+                               const float epsilon = 0.001f);
 
     static std::vector<float> winograd_transform_f(const std::vector<float>& f,
         const int outputs, const int channels);
@@ -99,7 +104,6 @@ private:
     static void winograd_sgemm(const std::vector<float>& U,
                                const std::vector<float>& V,
                                std::vector<float>& M, const int C, const int K);
-    static int get_nn_idx_symmetry(const int vertex, int symmetry);
     static void fill_input_plane_pair(const FullBoard& board,
                                       std::vector<net_t>::iterator black,
                                       std::vector<net_t>::iterator white,
