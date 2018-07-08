@@ -36,6 +36,7 @@
 #include "FullBoard.h"
 #include "GameState.h"
 #include "Network.h"
+#include "NNCache.h"					
 #include "SGFTree.h"
 #include "SMP.h"
 #include "Training.h"
@@ -54,6 +55,9 @@ int cfg_max_visits;
 TimeManagement::enabled_t cfg_timemanage;
 int cfg_lagbuffer_cs;
 int cfg_resignpct;
+float cfg_max_wr;
+float cfg_min_wr;
+float cfg_mid_wr;
 int cfg_noise;
 int cfg_random_cnt;
 int cfg_random_min_visits;
@@ -95,11 +99,14 @@ void GTP::setup_default_parameters() {
     cfg_sgemm_exhaustive = false;
     cfg_tune_only = false;
 #endif
-    cfg_puct = 2.5f;
-    cfg_softmax_temp = 0.67f;
-    cfg_fpu_reduction = 0.25f;
+    cfg_puct = 1.25f;
+    cfg_softmax_temp = 1.0f;
+    cfg_fpu_reduction = 0.22f;
     // see UCTSearch::should_resign
     cfg_resignpct = -1;
+    cfg_max_wr = 0.7;
+    cfg_min_wr = 0.3;
+    cfg_mid_wr = 0.5;
     cfg_noise = false;
     cfg_random_cnt = 0;
     cfg_random_min_visits = 1;
@@ -315,6 +322,7 @@ bool GTP::execute(GameState & game, std::string xinput) {
         if (!cmdstream.fail()) {
             if (komi != old_komi) {
                 game.set_komi(komi);
+                NNCache::get_NNCache().clear_cache();
             }
             gtp_printf(id, "");
         } else {
@@ -577,10 +585,16 @@ bool GTP::execute(GameState & game, std::string xinput) {
         cmdstream >> symmetry;
 
         Network::Netresult vec;
+        auto current_komi = game.get_komi();
         if (cmdstream.fail()) {
             // Default = DIRECT with no symmetric change
-            vec = Network::get_scored_moves(
-                &game, Network::Ensemble::DIRECT, Network::IDENTITY_SYMMETRY, true);
+            for (auto s = -500.0f; s <= 500.0f; s = s + 2.5) {
+                game.set_komi(s);
+                vec = Network::get_scored_moves(
+                    &game, Network::Ensemble::DIRECT, Network::IDENTITY_SYMMETRY, true);
+                Network::show_heatmap(&game, vec, false);
+            }
+            game.set_komi(current_komi);
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
                 vec = Network::get_scored_moves(
