@@ -585,10 +585,30 @@ bool GTP::execute(GameState & game, std::string xinput) {
         cmdstream >> symmetry;
 
         Network::Netresult vec;
+        auto current_komi = game.get_komi();
         if (cmdstream.fail()) {
             // Default = DIRECT with no symmetric change
             vec = Network::get_scored_moves(
                 &game, Network::Ensemble::DIRECT, Network::IDENTITY_SYMMETRY, true);
+            std::vector<float> loc_incr;
+            game.set_komi(-300.0f);
+            auto vec_old = Network::get_scored_moves(&game, Network::Ensemble::DIRECT, Network::IDENTITY_SYMMETRY, true);
+            myprintf("komi | winrate\n");
+            myprintf("---- | ----\n");
+            for (auto s = -299.5f; s <= 300.0f; s = s + 0.5) {
+                game.set_komi(s);
+                vec = Network::get_scored_moves(&game, Network::Ensemble::DIRECT, Network::IDENTITY_SYMMETRY, true);
+                Network::show_heatmap(&game, vec, false);
+                if (vec_old.winrate < vec.winrate) { loc_incr.emplace_back(s); }
+                vec_old = vec;
+            }
+            game.set_komi(current_komi);
+            if (loc_incr.empty()) { myprintf("Perfect weight file! 完美的权重！\n"); }
+            else {
+                myprintf("Caution! 小心！在以下贴目值附近胜率是上升的！Winrate increasing near ");
+                for (float s : loc_incr) { myprintf("%4.1f, ", s); }
+                myprintf(".\n");
+            }
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
                 vec = Network::get_scored_moves(
