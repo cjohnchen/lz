@@ -74,6 +74,11 @@ int UCTNodePointer::get_visits() const {
     return 0;
 }
 
+int16_t UCTNodePointer::get_virtual_loss() const {
+    if (is_inflated()) return read_ptr()->get_virtual_loss();
+    return 0;
+}
+
 float UCTNodePointer::get_score() const {
     if (is_inflated()) return read_ptr()->get_score();
     return read_score();

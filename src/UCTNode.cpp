@@ -205,6 +205,10 @@ int UCTNode::get_visits() const {
     return m_visits;
 }
 
+int16_t UCTNode::get_virtual_loss() const {
+    return m_virtual_loss;
+}
+
 // Return the true score, without taking into account virtual losses.
 float UCTNode::get_pure_eval(int tomove) const {
     auto visits = get_visits();
@@ -258,7 +262,7 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
     auto parentvisits = size_t{0};
     for (const auto& child : m_children) {
         if (child.valid()) {
-            parentvisits += child.get_visits();
+            parentvisits += child.get_visits() + int{ child.get_virtual_loss() };
             if (child.get_visits() > 0) {
                 total_visited_policy += child.get_score();
             }
@@ -289,7 +293,7 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
             winrate = child.get_eval(color);
         }
         auto psa = child.get_score();
-        auto denom = 1.0 + child.get_visits();
+        auto denom = 1.0 + child.get_visits() + int{ child.get_virtual_loss() };
         auto puct = cfg_puct * psa * (numerator / denom);
         auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
