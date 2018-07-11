@@ -1014,6 +1014,7 @@ Network::Netresult Network::get_scored_moves_internal(
 
     result.policy_pass = outputs[BOARD_SQUARES];
     result.winrate = winrate;
+    result.raw_winrate = winrate_out[0];
 
     return result;
 }
