@@ -77,6 +77,7 @@ private:
     std::unordered_map<std::uint64_t, std::unique_ptr<const Entry>> m_cache;
     // Order entries were added to the map.
     std::deque<size_t> m_order;
+
 };
 
 #endif
