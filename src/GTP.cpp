@@ -36,7 +36,7 @@
 #include "FullBoard.h"
 #include "GameState.h"
 #include "Network.h"
-#include "NNCache.h"					
+#include "NNCache.h"	
 #include "SGFTree.h"
 #include "SMP.h"
 #include "Training.h"
@@ -588,13 +588,62 @@ bool GTP::execute(GameState & game, std::string xinput) {
         auto current_komi = game.get_komi();
         if (cmdstream.fail()) {
             // Default = DIRECT with no symmetric change
-            for (auto s = -500.0f; s <= 500.0f; s = s + 2.5) {
+            vec = Network::get_scored_moves(
+                &game, Network::Ensemble::DIRECT, Network::IDENTITY_SYMMETRY, true);
+            std::vector<float> loc_incr;
+            game.set_komi(-300.0f);
+            auto vec_old = Network::get_scored_moves(&game, Network::Ensemble::DIRECT, Network::IDENTITY_SYMMETRY, true);
+            auto accum_neg = 1.0f / (1.0f + std::exp(2.0f * vec_old.raw_winrate));
+            auto raw_accum_neg = 0.0f;
+            myprintf("komi | winrate\n");
+            myprintf("---- | ----\n");
+            for (auto s = -299.5f; s <= 0.0f; s = s + 0.5) {
                 game.set_komi(s);
-                vec = Network::get_scored_moves(
-                    &game, Network::Ensemble::DIRECT, Network::IDENTITY_SYMMETRY, true);
+                vec = Network::get_scored_moves(&game, Network::Ensemble::DIRECT, Network::IDENTITY_SYMMETRY, true);
                 Network::show_heatmap(&game, vec, false);
+                if (vec_old.raw_winrate < vec.raw_winrate) {
+                    loc_incr.emplace_back(s); 
+                    accum_neg += 1.0f / (1.0f + std::exp(2.0f * vec_old.raw_winrate)) - 1.0f / (1.0f + std::exp(2.0f * vec.raw_winrate));
+                    raw_accum_neg += vec.raw_winrate - vec_old.raw_winrate;
+                }
+                vec_old = vec;
             }
+            auto accum_pos = 0.0f;
+            auto raw_accum_pos = 0.0f;
+            for (auto s = 0.5; s <= 300.0f; s = s + 0.5) {
+                game.set_komi(s);
+                vec = Network::get_scored_moves(&game, Network::Ensemble::DIRECT, Network::IDENTITY_SYMMETRY, true);
+                Network::show_heatmap(&game, vec, false);
+                if (vec_old.raw_winrate < vec.raw_winrate) {
+                    loc_incr.emplace_back(s);
+                    accum_pos += 1.0f / (1.0f + std::exp(-2.0f * vec.raw_winrate)) - 1.0f / (1.0f + std::exp(-2.0f * vec_old.raw_winrate));
+                    raw_accum_pos += vec.raw_winrate - vec_old.raw_winrate;
+                }
+                vec_old = vec;
+            }
+            accum_pos += 1.0f / (1.0f + std::exp(-2.0f * vec.raw_winrate));
             game.set_komi(current_komi);
+            //if (loc_incr.empty()) { myprintf("Perfect weight file! �����Ȩ�أ�\n"); }
+            myprintf("��������Ŀֵ����ʤ��������ģ�Winrate increasing near ");
+            for (float s : loc_incr) { myprintf("%4.1f, ", s); }
+            myprintf(".\n");
+            myprintf("Negative komi total score: %e\n", accum_neg);
+            myprintf("Negative komi reference score: %e\n", raw_accum_neg);
+            myprintf("Positive komi total score: %e\n", accum_pos);
+            myprintf("Positive komi reference score: %e\n", raw_accum_pos);
+            const auto thres = 0.05f;
+            if (accum_neg <= thres && accum_pos <= thres) {
+                myprintf("Weight file is of good quality for dynamic komi! Ȩ������������������ӣ������ð档\n");
+            }
+            else if (accum_neg > thres && accum_pos > thres) {
+                myprintf("Weight file is unusable for dynamic komi. Sorry. Ȩ��������ѣ������������ӣ������ð档\n");
+            }
+            else if (accum_neg <= thres) {
+                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --neg. Ȩ������еȣ�����Ŀ���ֲ��ѣ��Ƽ�ʹ��--neg����\n");
+            }
+            else {
+                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --pos. Ȩ������еȣ�����Ŀ���ֲ��ѣ��Ƽ�ʹ��--pos����\n");
+            }
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
                 vec = Network::get_scored_moves(

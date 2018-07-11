@@ -49,6 +49,7 @@ public:
 
         // winrate
         float winrate;
+        float raw_winrate;
 
         Netresult() : policy(BOARD_SQUARES), policy_pass(0.0f), winrate(0.0f) {}
     };
