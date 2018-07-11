@@ -290,7 +290,6 @@ void UCTSearch::output_analysis(FastState & state, UCTNode & parent) {
         // Store data in array
         float N_num_f = node->get_score() * 100.0f;
         sortable_data.emplace_back(move, node->get_visits(), move_eval, std::to_string(N_num_f), pv);
-
     }
     // Sort array to decide order
     std::stable_sort(rbegin(sortable_data), rend(sortable_data));
