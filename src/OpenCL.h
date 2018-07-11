@@ -64,7 +64,6 @@ private:
     cl::Kernel m_out_transform_bn_in_kernel;
     cl::Buffer m_inBuffer;
     cl::Buffer m_inBuffer2;
-    cl::Buffer m_inBufferNoBN;
     cl::Buffer m_VBuffer;
     cl::Buffer m_MBuffer;
     cl::Buffer m_pinnedOutBuffer_pol;
@@ -83,18 +82,12 @@ public:
                        unsigned int channels,
                        unsigned int outputs,
                        const std::vector<float>& weights,
-                       const std::vector<float>& biases,
                        const std::vector<float>& means,
-                       const std::vector<float>& variances,
-                       const std::vector<float>& gamma,
-                       const std::vector<float>& beta) {
+                       const std::vector<float>& variances) {
         size_t layer = get_layer_count();
         push_weights(layer, weights);
-        push_weights(layer, biases);
         push_weights(layer, means);
         push_weights(layer, variances);
-        push_weights(layer, gamma);
-        push_weights(layer, beta);
         m_layers[layer].is_input_convolution = true;
         m_layers[layer].outputs = outputs;
         m_layers[layer].filter_size = filter_size;
@@ -105,30 +98,18 @@ public:
                        unsigned int channels,
                        unsigned int outputs,
                        const std::vector<float>& weights_1,
-                       const std::vector<float>& biases_1,
                        const std::vector<float>& means_1,
                        const std::vector<float>& variances_1,
-                       const std::vector<float>& gamma_1,
-                       const std::vector<float>& beta_1,
                        const std::vector<float>& weights_2,
-                       const std::vector<float>& biases_2,
                        const std::vector<float>& means_2,
-                       const std::vector<float>& variances_2,
-                       const std::vector<float>& gamma_2,
-                       const std::vector<float>& beta_2) {
+                       const std::vector<float>& variances_2) {
         size_t layer = get_layer_count();
         push_weights(layer, weights_1);
-        push_weights(layer, biases_1);
         push_weights(layer, means_1);
         push_weights(layer, variances_1);
-        push_weights(layer, gamma_1);
-        push_weights(layer, beta_1);
         push_weights(layer, weights_2);
-        push_weights(layer, biases_2);
         push_weights(layer, means_2);
         push_weights(layer, variances_2);
-        push_weights(layer, gamma_2);
-        push_weights(layer, beta_2);
         m_layers[layer].is_residual_block = true;
         m_layers[layer].outputs = outputs;
         m_layers[layer].filter_size = filter_size;
@@ -164,7 +145,6 @@ private:
     void convolve3(int channels, int outputs,
                     cl::Buffer& bufferIn,
                     cl::Buffer& bufferOut,
-                    cl::Buffer* bufferOutNoBN,
                     cl::Buffer& bufferV,
                     cl::Buffer& bufferM, weight_slice_t weights,
                     cl::Buffer* bufferResidual,

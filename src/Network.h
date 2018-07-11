@@ -60,7 +60,7 @@ public:
                                       const bool skip_cache = false);
 
     static constexpr auto INPUT_MOVES = 8;
-    static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 1;
+    static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 2;
     static constexpr auto OUTPUTS_POLICY = 2;
     static constexpr auto OUTPUTS_VALUE = 1;
 
@@ -83,7 +83,7 @@ private:
     static std::pair<int, int> load_v1_network(std::istream& wtfile);
     static std::pair<int, int> load_network_file(const std::string& filename);
     static void process_bn_var(std::vector<float>& weights,
-                               const float epsilon = 0.001f);
+                               const float epsilon = 1e-5f);
 
     static std::vector<float> winograd_transform_f(const std::vector<float>& f,
         const int outputs, const int channels);

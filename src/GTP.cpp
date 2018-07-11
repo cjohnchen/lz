@@ -36,7 +36,7 @@
 #include "FullBoard.h"
 #include "GameState.h"
 #include "Network.h"
-#include "NNCache.h"	
+#include "NNCache.h"
 #include "SGFTree.h"
 #include "SMP.h"
 #include "Training.h"
@@ -99,9 +99,9 @@ void GTP::setup_default_parameters() {
     cfg_sgemm_exhaustive = false;
     cfg_tune_only = false;
 #endif
-    cfg_puct = 1.25f;
+    cfg_puct = 0.8f;
     cfg_softmax_temp = 1.0f;
-    cfg_fpu_reduction = 0.22f;
+    cfg_fpu_reduction = 0.25f;
     // see UCTSearch::should_resign
     cfg_resignpct = -1;
     cfg_max_wr = 0.7;
@@ -623,8 +623,8 @@ bool GTP::execute(GameState & game, std::string xinput) {
             }
             accum_pos += 1.0f / (1.0f + std::exp(-2.0f * vec.raw_winrate));
             game.set_komi(current_komi);
-            //if (loc_incr.empty()) { myprintf("Perfect weight file! ï¿½ï¿½ï¿½ï¿½ï¿½È¨ï¿½Ø£ï¿½\n"); }
-            myprintf("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿Öµï¿½ï¿½ï¿½ï¿½Ê¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä£ï¿½Winrate increasing near ");
+            //if (loc_incr.empty()) { myprintf("Perfect weight file! ÍêÃÀµÄÈ¨ÖØ£¡\n"); }
+            myprintf("ÔÚÒÔÏÂÌùÄ¿Öµ¸½½üÊ¤ÂÊÊÇÉÏÉýµÄ£ºWinrate increasing near ");
             for (float s : loc_incr) { myprintf("%4.1f, ", s); }
             myprintf(".\n");
             myprintf("Negative komi total score: %e\n", accum_neg);
@@ -633,16 +633,16 @@ bool GTP::execute(GameState & game, std::string xinput) {
             myprintf("Positive komi reference score: %e\n", raw_accum_pos);
             const auto thres = 0.05f;
             if (accum_neg <= thres && accum_pos <= thres) {
-                myprintf("Weight file is of good quality for dynamic komi! È¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã°æ¡£\n");
+                myprintf("Weight file is of good quality for dynamic komi! È¨ÖØÖÊÁ¿²»´í£¬¿ÉÓÃÓÚÈÃ×Ó£¯²»ÍËÈÃ°æ¡£\n");
             }
             else if (accum_neg > thres && accum_pos > thres) {
-                myprintf("Weight file is unusable for dynamic komi. Sorry. È¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã°æ¡£\n");
+                myprintf("Weight file is unusable for dynamic komi. Sorry. È¨ÖØÖÊÁ¿²»¼Ñ£¬²»ÄÜÓÃÓÚÈÃ×Ó£¯²»ÍËÈÃ°æ¡£\n");
             }
             else if (accum_neg <= thres) {
-                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --neg. È¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÐµÈ£ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½Ö²ï¿½ï¿½Ñ£ï¿½ï¿½Æ¼ï¿½Ê¹ï¿½ï¿½--negï¿½ï¿½ï¿½ï¿½\n");
+                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --neg. È¨ÖØÖÊÁ¿ÖÐµÈ£¬ÕýÌùÄ¿±íÏÖ²»¼Ñ£¬ÍÆ¼öÊ¹ÓÃ--neg²ÎÊý¡£\n");
             }
             else {
-                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --pos. È¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÐµÈ£ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½Ö²ï¿½ï¿½Ñ£ï¿½ï¿½Æ¼ï¿½Ê¹ï¿½ï¿½--posï¿½ï¿½ï¿½ï¿½\n");
+                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --pos. È¨ÖØÖÊÁ¿ÖÐµÈ£¬¸ºÌùÄ¿±íÏÖ²»¼Ñ£¬ÍÆ¼öÊ¹ÓÃ--pos²ÎÊý¡£\n");
             }
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
