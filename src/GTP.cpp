@@ -36,7 +36,6 @@
 #include "FullBoard.h"
 #include "GameState.h"
 #include "Network.h"
-#include "NNCache.h"
 #include "SGFTree.h"
 #include "SMP.h"
 #include "Training.h"
@@ -55,9 +54,6 @@ int cfg_max_visits;
 TimeManagement::enabled_t cfg_timemanage;
 int cfg_lagbuffer_cs;
 int cfg_resignpct;
-float cfg_max_wr;
-float cfg_min_wr;
-float cfg_mid_wr;
 int cfg_noise;
 int cfg_random_cnt;
 int cfg_random_min_visits;
@@ -104,9 +100,6 @@ void GTP::setup_default_parameters() {
     cfg_fpu_reduction = 0.0f;
     // see UCTSearch::should_resign
     cfg_resignpct = -1;
-    cfg_max_wr = 0.12;
-    cfg_min_wr = 0.05;
-    cfg_mid_wr = 0.10;
     cfg_noise = false;
     cfg_random_cnt = 0;
     cfg_random_min_visits = 1;
@@ -322,7 +315,6 @@ bool GTP::execute(GameState & game, std::string xinput) {
         if (!cmdstream.fail()) {
             if (komi != old_komi) {
                 game.set_komi(komi);
-                NNCache::get_NNCache().clear_cache();
             }
             gtp_printf(id, "");
         } else {

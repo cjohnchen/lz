@@ -37,7 +37,6 @@ public:
 
     void set_komi(float komi);
     float get_komi() const;
-    float get_opp_komi() const;
     void set_handicap(int hcap);
     int get_handicap() const;
     int get_passes() const;
@@ -57,7 +56,6 @@ public:
     FullBoard board;
 
     float m_komi;
-    float m_opp_komi;
     int m_handicap;
     int m_passes;
     int m_komove;

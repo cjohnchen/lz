@@ -1169,7 +1169,6 @@ std::vector<net_t> Network::gather_features(const GameState* const state,
                           begin(input_data) + BOARD_SQUARES :
                           begin(input_data);
     const auto to_move_it = begin(input_data) + 2 * INPUT_MOVES * BOARD_SQUARES;
-    const net_t color_input = blacks_move ? 0.5f + (state->get_komi()) / 15.0f : 0.5f - (state->get_komi()) / 15.0f;
 
     const auto moves = std::min<size_t>(state->get_movenum() + 1, INPUT_MOVES);
     // Go back in time, fill history boards
@@ -1180,7 +1179,9 @@ std::vector<net_t> Network::gather_features(const GameState* const state,
                               white_it + h * BOARD_SQUARES * 2,
                               symmetry);
     }
-    std::fill(to_move_it, to_move_it + BOARD_SQUARES, color_input);
+
+    if (blacks_move)
+        std::fill(to_move_it, to_move_it + BOARD_SQUARES, net_t(true));
 
     return input_data;
 }
