@@ -37,6 +37,7 @@ void FastState::init_game(int size, float komi) {
     m_komove = FastBoard::NO_VERTEX;
     m_lastmove = FastBoard::NO_VERTEX;
     m_komi = komi;
+    m_opp_komi = komi;
     m_handicap = 0;
     m_passes = 0;
 
@@ -98,6 +99,7 @@ void FastState::play_move(int color, int vertex) {
         set_passes(0);
     }
     board.m_hash ^= Zobrist::zobrist_pass[get_passes()];
+    std::swap(m_komi, m_opp_komi);
 }
 
 size_t FastState::get_movenum() const {
@@ -153,6 +155,10 @@ float FastState::final_score() const {
 
 float FastState::get_komi() const {
     return m_komi;
+}
+
+float FastState::get_opp_komi() const {
+    return m_opp_komi;
 }
 
 void FastState::set_handicap(int hcap) {
