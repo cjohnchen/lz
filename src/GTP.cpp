@@ -623,8 +623,8 @@ bool GTP::execute(GameState & game, std::string xinput) {
             }
             accum_pos += 1.0f / (1.0f + std::exp(-2.0f * vec.raw_winrate));
             game.set_komi(current_komi);
-            //if (loc_incr.empty()) { myprintf("Perfect weight file! �����Ȩ�أ�\n"); }
-            myprintf("��������Ŀֵ����ʤ��������ģ�Winrate increasing near ");
+            //if (loc_incr.empty()) { myprintf("Perfect weight file! 完美的权重！\n"); }
+            myprintf("在以下贴目值附近胜率是上升的：Winrate increasing near ");
             for (float s : loc_incr) { myprintf("%4.1f, ", s); }
             myprintf(".\n");
             myprintf("Negative komi total score: %e\n", accum_neg);
@@ -633,16 +633,16 @@ bool GTP::execute(GameState & game, std::string xinput) {
             myprintf("Positive komi reference score: %e\n", raw_accum_pos);
             const auto thres = 0.05f;
             if (accum_neg <= thres && accum_pos <= thres) {
-                myprintf("Weight file is of good quality for dynamic komi! Ȩ������������������ӣ������ð档\n");
+                myprintf("Weight file is of good quality for dynamic komi! 权重质量不错，可用于让子／不退让版。\n");
             }
             else if (accum_neg > thres && accum_pos > thres) {
-                myprintf("Weight file is unusable for dynamic komi. Sorry. Ȩ��������ѣ������������ӣ������ð档\n");
+                myprintf("Weight file is unusable for dynamic komi. Sorry. 权重质量不佳，不能用于让子／不退让版。\n");
             }
             else if (accum_neg <= thres) {
-                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --neg. Ȩ������еȣ�����Ŀ���ֲ��ѣ��Ƽ�ʹ��--neg����\n");
+                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --neg. 权重质量中等，正贴目表现不佳，推荐使用--neg参数。\n");
             }
             else {
-                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --pos. Ȩ������еȣ�����Ŀ���ֲ��ѣ��Ƽ�ʹ��--pos����\n");
+                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --pos. 权重质量中等，负贴目表现不佳，推荐使用--pos参数。\n");
             }
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
