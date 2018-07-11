@@ -105,6 +105,7 @@ public:
     // constructing UCTNode
     bool valid() const;
     int get_visits() const;
+    int16_t get_virtual_loss() const;
     float get_score() const;
     bool active() const;
     int get_move() const;
