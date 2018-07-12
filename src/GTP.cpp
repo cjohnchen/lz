@@ -623,26 +623,28 @@ bool GTP::execute(GameState & game, std::string xinput) {
             }
             accum_pos += 1.0f / (1.0f + std::exp(-2.0f * vec.raw_winrate));
             game.set_komi(current_komi);
-            //if (loc_incr.empty()) { myprintf("Perfect weight file! å®Œç¾çš„æƒé‡ï¼\n"); }
-            myprintf("åœ¨ä»¥ä¸‹è´´ç›®å€¼é™„è¿‘èƒœç‡æ˜¯ä¸Šå‡çš„ï¼šWinrate increasing near ");
-            for (float s : loc_incr) { myprintf("%4.1f, ", s); }
-            myprintf(".\n");
+            if (loc_incr.empty()) { myprintf("Perfect weight file! ÍêÃÀµÄÈ¨ÖØ£¡\n"); }
+            else {
+                myprintf("ÔÚÒÔÏÂÌùÄ¿Öµ¸½½üÊ¤ÂÊÊÇÉÏÉıµÄ£ºWinrate increasing near ");
+                for (float s : loc_incr) { myprintf("%4.1f, ", s); }
+                myprintf(".\n");
+            }
             myprintf("Negative komi total score: %e\n", accum_neg);
             myprintf("Negative komi reference score: %e\n", raw_accum_neg);
             myprintf("Positive komi total score: %e\n", accum_pos);
             myprintf("Positive komi reference score: %e\n", raw_accum_pos);
             const auto thres = 0.05f;
             if (accum_neg <= thres && accum_pos <= thres) {
-                myprintf("Weight file is of good quality for dynamic komi! æƒé‡è´¨é‡ä¸é”™ï¼Œå¯ç”¨äºè®©å­ï¼ä¸é€€è®©ç‰ˆã€‚\n");
+                myprintf("Weight file is of good quality for dynamic komi! È¨ÖØÖÊÁ¿²»´í£¬¿ÉÓÃÓÚÈÃ×Ó£¯²»ÍËÈÃ°æ¡£\n");
             }
             else if (accum_neg > thres && accum_pos > thres) {
-                myprintf("Weight file is unusable for dynamic komi. Sorry. æƒé‡è´¨é‡ä¸ä½³ï¼Œä¸èƒ½ç”¨äºè®©å­ï¼ä¸é€€è®©ç‰ˆã€‚\n");
+                myprintf("Weight file is unusable for dynamic komi. Sorry. È¨ÖØÖÊÁ¿²»¼Ñ£¬²»ÄÜÓÃÓÚÈÃ×Ó£¯²»ÍËÈÃ°æ¡£\n");
             }
             else if (accum_neg <= thres) {
-                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --neg. æƒé‡è´¨é‡ä¸­ç­‰ï¼Œæ­£è´´ç›®è¡¨ç°ä¸ä½³ï¼Œæ¨èä½¿ç”¨--negå‚æ•°ã€‚\n");
+                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --neg. È¨ÖØÖÊÁ¿ÖĞµÈ£¬ÕıÌùÄ¿±íÏÖ²»¼Ñ£¬ÍÆ¼öÊ¹ÓÃ--neg²ÎÊı¡£\n");
             }
             else {
-                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --pos. æƒé‡è´¨é‡ä¸­ç­‰ï¼Œè´Ÿè´´ç›®è¡¨ç°ä¸ä½³ï¼Œæ¨èä½¿ç”¨--poså‚æ•°ã€‚\n");
+                myprintf("Weight file is of mediocre quality for dynamic komi. Use with the option --pos. È¨ÖØÖÊÁ¿ÖĞµÈ£¬¸ºÌùÄ¿±íÏÖ²»¼Ñ£¬ÍÆ¼öÊ¹ÓÃ--pos²ÎÊı¡£\n");
             }
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
