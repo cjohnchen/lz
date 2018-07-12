@@ -101,7 +101,7 @@ void GTP::setup_default_parameters() {
 #endif
     cfg_puct_factor = 1;
     cfg_backup_pct = 50.0;
-    cfg_backup_type = 3;
+    cfg_backup_type = 1;
     cfg_pseudo_backup = true;
     cfg_puct = 0.8f;
     cfg_softmax_temp = 1.0f;

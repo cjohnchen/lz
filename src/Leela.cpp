@@ -87,8 +87,8 @@ static void parse_commandline(int argc, char *argv[]) {
                       "The lower the value, the weaker you assume white to be.")
         ("backup-type", po::value<int>()->default_value(cfg_backup_type),
                       "0: throw a dice to go up a generation,\n"
-                      "1: always update, 2: never update,\n"
-                      "3: throw dice once for each simulation (default),\n"
+                      "1: always update (default), 2: never update,\n"
+                      "3: throw dice once for each simulation,\n"
                       "4: throw dice once for each ancestor,\n"
                       "5: update the foremost ancestors only.")
         ("pseudo-backup", po::value<std::string>()->default_value("on"),
