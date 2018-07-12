@@ -139,20 +139,22 @@ void UCTNode::link_nodelist(std::atomic<int>& nodecount,
     const auto max_psa = nodelist[0].first;
     const auto old_min_psa = max_psa * m_min_psa_ratio_children;
     const auto new_min_psa = max_psa * min_psa_ratio;
+    const int64_t max_children = 64;
     if (new_min_psa > 0.0f) {
         m_children.reserve(
-            std::count_if(cbegin(nodelist), cend(nodelist),
-                [=](const auto& node) { return node.first >= new_min_psa; }
-            )
+            std::min(int64_t{ std::count_if(cbegin(nodelist), cend(nodelist),
+                [=](const auto& node) { return node.first >= new_min_psa; }) }, max_children)
         );
     } else {
-        m_children.reserve(nodelist.size());
+        m_children.reserve(std::min(uint64_t{ nodelist.size() }, uint64_t{ max_children }));
     }
 
     auto skipped_children = false;
+    int num_children = 0;
     for (const auto& node : nodelist) {
-        if (node.first < new_min_psa) {
+        if (node.first < new_min_psa || ++num_children > max_children) {
             skipped_children = true;
+            break;
         } else if (node.first < old_min_psa) {
             m_children.emplace_back(node.second, node.first);
             ++nodecount;
