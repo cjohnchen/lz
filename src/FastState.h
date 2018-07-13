@@ -56,6 +56,9 @@ public:
     FullBoard board;
 
     float m_komi;
+    float m_pkomi{ 7.5 };
+    float m_opp_pkomi{ 7.5 };
+    float m_shift{ 0.0 };
     int m_handicap;
     int m_passes;
     int m_komove;

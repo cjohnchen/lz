@@ -1,19 +1,19 @@
 /*
-    This file is part of Leela Zero.
-    Copyright (C) 2017-2018 Gian-Carlo Pascutto and contributors
+This file is part of Leela Zero.
+Copyright (C) 2017-2018 Gian-Carlo Pascutto and contributors
 
-    Leela Zero is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+Leela Zero is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-    Leela Zero is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+Leela Zero is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
-    along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
+You should have received a copy of the GNU General Public License
+along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "Training.h"
@@ -85,13 +85,13 @@ std::istream& operator>> (std::istream& stream, TimeStep& timestep) {
 }
 
 std::string OutputChunker::gen_chunk_name(void) const {
-    auto base = std::string{m_basename};
+    auto base = std::string{ m_basename };
     base.append("." + std::to_string(m_chunk_count) + ".gz");
     return base;
 }
 
 OutputChunker::OutputChunker(const std::string& basename,
-                             bool compress)
+    bool compress)
     : m_basename(basename), m_compress(compress) {
 }
 
@@ -120,12 +120,13 @@ void OutputChunker::flush_chunks() {
         if (!comp_size) {
             throw std::runtime_error("Error in gzip output");
         }
-        Utils::myprintf("Writing chunk %d\n",  m_chunk_count);
+        Utils::myprintf("Writing chunk %d\n", m_chunk_count);
         gzclose(out);
-    } else {
+    }
+    else {
         auto chunk_name = m_basename;
         auto flags = std::ofstream::out | std::ofstream::app;
-        auto out = std::ofstream{chunk_name, flags};
+        auto out = std::ofstream{ chunk_name, flags };
         out << m_buffer;
         out.close();
     }
@@ -145,7 +146,7 @@ TimeStep::NNPlanes Training::get_planes(const GameState* const state) {
     auto planes = TimeStep::NNPlanes{};
     planes.resize(Network::INPUT_CHANNELS);
 
-    for (auto c = size_t{0}; c < Network::INPUT_CHANNELS; c++) {
+    for (auto c = size_t{ 0 }; c < Network::INPUT_CHANNELS; c++) {
         for (auto idx = 0; idx < BOARD_SQUARES; idx++) {
             planes[c][idx] = bool(input_data[c * BOARD_SQUARES + idx]);
         }
@@ -160,14 +161,14 @@ void Training::record(GameState& state, UCTNode& root) {
 
     auto result =
         Network::get_scored_moves(&state, Network::Ensemble::DIRECT, 0);
-    step.net_winrate = result.winrate;
+    step.net_winrate = (step.to_move == FastBoard::BLACK ? result.black_winrate : result.white_winrate);
 
     const auto& best_node = root.get_best_root_child(step.to_move);
-    step.root_uct_winrate = root.get_eval(step.to_move);
-    step.child_uct_winrate = best_node.get_eval(step.to_move);
+    step.root_uct_winrate = root.get_pure_eval(step.to_move);
+    step.child_uct_winrate = best_node.get_pure_eval(step.to_move);
     step.bestmove_visits = best_node.get_visits();
 
-    step.probabilities.resize((BOARD_SQUARES) + 1);
+    step.probabilities.resize((BOARD_SQUARES)+1);
 
     // Get total visit amount. We count rather
     // than trust the root to avoid ttable issues.
@@ -190,7 +191,8 @@ void Training::record(GameState& state, UCTNode& root) {
         if (move != FastBoard::PASS) {
             auto xy = state.board.get_xy(move);
             step.probabilities[xy.second * BOARD_SIZE + xy.first] = prob;
-        } else {
+        }
+        else {
             step.probabilities[BOARD_SQUARES] = prob;
         }
     }
@@ -199,19 +201,19 @@ void Training::record(GameState& state, UCTNode& root) {
 }
 
 void Training::dump_training(int winner_color, const std::string& filename) {
-    auto chunker = OutputChunker{filename, true};
+    auto chunker = OutputChunker{ filename, true };
     dump_training(winner_color, chunker);
 }
 
 void Training::save_training(const std::string& filename) {
     auto flags = std::ofstream::out;
-    auto out = std::ofstream{filename, flags};
+    auto out = std::ofstream{ filename, flags };
     save_training(out);
 }
 
 void Training::load_training(const std::string& filename) {
     auto flags = std::ifstream::in;
-    auto in = std::ifstream{filename, flags};
+    auto in = std::ifstream{ filename, flags };
     load_training(in);
 }
 
@@ -236,14 +238,14 @@ void Training::dump_training(int winner_color, OutputChunker& outchunk) {
     for (const auto& step : m_data) {
         auto out = std::stringstream{};
         // First output 16 times an input feature plane
-        for (auto p = size_t{0}; p < 16; p++) {
+        for (auto p = size_t{ 0 }; p < 16; p++) {
             const auto& plane = step.planes[p];
             // Write it out as a string of hex characters
-            for (auto bit = size_t{0}; bit + 3 < plane.size(); bit += 4) {
-                auto hexbyte =  plane[bit]     << 3
-                              | plane[bit + 1] << 2
-                              | plane[bit + 2] << 1
-                              | plane[bit + 3] << 0;
+            for (auto bit = size_t{ 0 }; bit + 3 < plane.size(); bit += 4) {
+                auto hexbyte = plane[bit] << 3
+                    | plane[bit + 1] << 2
+                    | plane[bit + 2] << 1
+                    | plane[bit + 3] << 0;
                 out << std::hex << hexbyte;
             }
             // BOARD_SQUARES % 4 = 1 so the last bit goes by itself
@@ -267,7 +269,8 @@ void Training::dump_training(int winner_color, OutputChunker& outchunk) {
         // And the game result for the side to move
         if (step.to_move == winner_color) {
             out << "1";
-        } else {
+        }
+        else {
             out << "-1";
         }
         out << std::endl;
@@ -277,7 +280,7 @@ void Training::dump_training(int winner_color, OutputChunker& outchunk) {
 }
 
 void Training::dump_debug(const std::string& filename) {
-    auto chunker = OutputChunker{filename, true};
+    auto chunker = OutputChunker{ filename, true };
     dump_debug(chunker);
 }
 
@@ -301,21 +304,21 @@ void Training::dump_debug(OutputChunker& outchunk) {
 }
 
 void Training::process_game(GameState& state, size_t& train_pos, int who_won,
-                            const std::vector<int>& tree_moves,
-                            OutputChunker& outchunker) {
+    const std::vector<int>& tree_moves,
+    OutputChunker& outchunker) {
     clear_training();
-    auto counter = size_t{0};
+    auto counter = size_t{ 0 };
     state.rewind();
 
     do {
         auto to_move = state.get_to_move();
         auto move_vertex = tree_moves[counter];
-        auto move_idx = size_t{0};
+        auto move_idx = size_t{ 0 };
 
         // Detect if this SGF seems to be corrupted
         if (!state.is_move_legal(to_move, move_vertex)) {
             std::cout << "Mainline move not found: " << move_vertex
-                      << std::endl;
+                << std::endl;
             return;
         }
 
@@ -323,7 +326,8 @@ void Training::process_game(GameState& state, size_t& train_pos, int who_won,
             // get x y coords for actual move
             auto xy = state.board.get_xy(move_vertex);
             move_idx = (xy.second * BOARD_SIZE) + xy.first;
-        } else {
+        }
+        else {
             move_idx = BOARD_SQUARES; // PASS
         }
 
@@ -344,11 +348,11 @@ void Training::process_game(GameState& state, size_t& train_pos, int who_won,
 }
 
 void Training::dump_supervised(const std::string& sgf_name,
-                               const std::string& out_filename) {
-    auto outchunker = OutputChunker{out_filename, true};
+    const std::string& out_filename) {
+    auto outchunker = OutputChunker{ out_filename, true };
     auto games = SGFParser::chop_all(sgf_name);
     auto gametotal = games.size();
-    auto train_pos = size_t{0};
+    auto train_pos = size_t{ 0 };
 
     std::cout << "Total games in file: " << gametotal << std::endl;
     // Shuffle games around
@@ -357,11 +361,12 @@ void Training::dump_supervised(const std::string& sgf_name,
     std::cout << "done." << std::endl;
 
     Time start;
-    for (auto gamecount = size_t{0}; gamecount < gametotal; gamecount++) {
+    for (auto gamecount = size_t{ 0 }; gamecount < gametotal; gamecount++) {
         auto sgftree = std::make_unique<SGFTree>();
         try {
             sgftree->load_from_string(games[gamecount]);
-        } catch (...) {
+        }
+        catch (...) {
             continue;
         };
 
@@ -393,7 +398,7 @@ void Training::dump_supervised(const std::string& sgf_name,
         }
 
         process_game(*state, train_pos, who_won, tree_moves,
-                    outchunker);
+            outchunker);
     }
 
     std::cout << "Dumped " << train_pos << " training positions." << std::endl;

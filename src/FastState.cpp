@@ -55,6 +55,9 @@ void FastState::reset_game(void) {
     m_handicap = 0;
     m_komove = 0;
     m_lastmove = 0;
+    m_pkomi = 7.5;
+    m_opp_pkomi = 7.5;
+    m_shift = 0.0;
 }
 
 void FastState::reset_board(void) {
@@ -98,6 +101,7 @@ void FastState::play_move(int color, int vertex) {
         set_passes(0);
     }
     board.m_hash ^= Zobrist::zobrist_pass[get_passes()];
+    std::swap(m_pkomi, m_opp_pkomi);
 }
 
 size_t FastState::get_movenum() const {

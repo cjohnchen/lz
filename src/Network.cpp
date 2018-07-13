@@ -891,7 +891,8 @@ Network::Netresult Network::get_scored_moves(
     } else if (ensemble == AVERAGE) {
         for (auto sym = 0; sym < 8; ++sym) {
             auto tmpresult = get_scored_moves_internal(state, sym);
-            result.winrate += tmpresult.winrate / 8.0f;
+            result.black_winrate += tmpresult.black_winrate / 8.0f;
+            result.white_winrate += tmpresult.white_winrate / 8.0f;
             result.policy_pass += tmpresult.policy_pass / 8.0f;
 
             for (auto idx = size_t{0}; idx < BOARD_SQUARES; idx++) {
@@ -963,10 +964,6 @@ Network::Netresult Network::get_scored_moves_internal(
     const auto winrate_out =
         innerproduct<256, 1, false>(winrate_data, ip2_val_w, ip2_val_b);
 
-    // Sigmoid: tanh normalized to take value in (0,1)
-    const auto winrate_sig = 1.0f / (1.0f + std::exp(-2.0f * winrate_out[0]));
-    const auto opp_winrate_sig = 1.0f / (1.0f + std::exp(2.0f * winrate_out[0]));
-
     Netresult result;
 
     for (auto idx = size_t{0}; idx < BOARD_SQUARES; idx++) {
@@ -978,11 +975,11 @@ Network::Netresult Network::get_scored_moves_internal(
     
     // v1 format (Leela Zero native) returns side-to-move value, not black or white
     if (value_head_not_stm || state->board.get_to_move() == FastBoard::BLACK) {
-		result.black_winrate = winrate_sig;
-		result.white_winrate = opp_winrate_sig;
+        result.black_winrate = 1.0f / (1.0f + std::exp(-2.0f * (winrate_out[0] - state->m_shift)));
+        result.white_winrate = 1.0f / (1.0f + std::exp(2.0f * (winrate_out[0] - state->m_shift)));
 	} else {
-		result.black_winrate = opp_winrate_sig;
-		result.white_winrate = winrate_sig;
+        result.black_winrate = 1.0f / (1.0f + std::exp(2.0f * (winrate_out[0] + state->m_shift)));
+		result.white_winrate = 1.0f / (1.0f + std::exp(-2.0f * (winrate_out[0] + state->m_shift)));
 	}
 
     return result;
