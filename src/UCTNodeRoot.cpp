@@ -180,16 +180,16 @@ void UCTNode::inflate_all_children() {
 void UCTNode::prepare_root_node(int color,
                                 std::atomic<int>& nodes,
                                 GameState& root_state) {
-    float root_eval;
+    float root_eval, black_root_eval, white_root_eval;
     const auto had_children = has_children();
     if (expandable()) {
-        create_children(nodes, root_state, root_eval);
+        create_children(nodes, root_state, black_root_eval, white_root_eval);
     }
     if (had_children) {
-        root_eval = get_eval(color);
+        root_eval = get_eval(color, true);
     } else {
-        update(root_eval);
-        root_eval = (color == FastBoard::BLACK ? root_eval : 1.0f - root_eval);
+        update(black_root_eval, white_root_eval);
+        root_eval = (color == FastBoard::BLACK ? black_root_eval : white_root_eval);
     }
     Utils::myprintf("NN eval=%f\n", root_eval);
 

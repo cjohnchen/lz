@@ -420,7 +420,7 @@ int UCTSearch::get_best_move(passflag_t passflag) {
     assert(first_child != nullptr);
 
     auto bestmove = first_child->get_move();
-    auto bestscore = first_child->get_eval(color);
+    auto bestscore = first_child->get_eval(color, true);
 
     // do we want to fiddle with the best move because of the rule set?
     if (passflag & UCTSearch::NOPASS) {
@@ -434,7 +434,7 @@ int UCTSearch::get_best_move(passflag_t passflag) {
                 if (nopass->first_visit()) {
                     bestscore = 1.0f;
                 } else {
-                    bestscore = nopass->get_eval(color);
+                    bestscore = nopass->get_eval(color, true);
                 }
             } else {
                 myprintf("Pass is the only acceptable move.\n");
@@ -474,7 +474,7 @@ int UCTSearch::get_best_move(passflag_t passflag) {
                     if (nopass->first_visit()) {
                         bestscore = 1.0f;
                     } else {
-                        bestscore = nopass->get_eval(color);
+                        bestscore = nopass->get_eval(color, true);
                     }
                 } else {
                     myprintf("No alternative to passing.\n");

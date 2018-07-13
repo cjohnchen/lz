@@ -87,6 +87,7 @@ bool UCTNode::create_children(std::atomic<int>& nodecount,
 
     std::vector<Network::ScoreVertexPair> nodelist;
 
+    const auto to_move = state.board.get_to_move();
     auto legal_sum = 0.0f;
     for (auto i = 0; i < BOARD_SQUARES; i++) {
         const auto x = i % BOARD_SIZE;
@@ -214,7 +215,7 @@ float UCTNode::get_pure_eval(int tomove) const {
     }
 }
 
-float UCTNode::get_eval(int tomove) const {
+float UCTNode::get_eval(int tomove, bool noflip) const {
     // Due to the use of atomic updates and virtual losses, it is
     // possible for the visit count to change underneath us. Make sure
     // to return a consistent result to the caller by caching the values.
@@ -296,10 +297,11 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
         }
     }
     // Estimated eval for unknown nodes = current parent winrate - reduction
+    float fpu_eval;
     if (parent_eval < 0.5) {
-        auto fpu_eval = parent_eval - fpu_reduction;
+        fpu_eval = parent_eval - fpu_reduction;
     } else {
-        auto fpu_eval = - opp_parent_eval - fpu_reduction;
+        fpu_eval = - opp_parent_eval - fpu_reduction;
     }
 
     auto best = static_cast<UCTNodePointer*>(nullptr);
