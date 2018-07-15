@@ -32,6 +32,7 @@
 #include "FullBoard.h"
 #include "GTP.h"
 #include "GameState.h"
+#include "NNCache.h"
 #include "Random.h"
 #include "TimeControl.h"
 #include "Timing.h"
@@ -168,10 +169,42 @@ float calc_backup_pct (float whiteeval) {
 	}
 }
 
+float inv_wr(float wr) {
+    return -log(1.0 / wr - 1.0) / 2.0;
+}
+
+float UCTSearch::root_raw_wr() {
+    auto white_wr = m_root->get_pure_eval(FastBoard::WHITE);
+    if (white_wr > 0.5) {
+        return inv_wr(m_root->get_pure_eval(FastBoard::BLACK)) + m_rootstate.m_shift;
+    }
+    else {
+        return -inv_wr(white_wr) + m_rootstate.m_shift;
+    }
+}
+
+void UCTSearch::check_wr() {
+    auto root_raw_wr_ = root_raw_wr();
+    if (-root_raw_wr_ > inv_wr(cfg_max_wr)) {
+        m_adjusting_down = true;
+        m_est_bkomi = m_rootstate.m_bkomi - 15.0;
+        m_est_wkomi = m_rootstate.m_wkomi - 15.0;
+    }
+    else if (-root_raw_wr_ < inv_wr(cfg_min_wr)) {
+        m_adjusting_up = true;
+        m_est_bkomi = m_rootstate.m_bkomi + 15.0;
+        m_est_wkomi = m_rootstate.m_wkomi + 15.0;
+    }
+    m_bcount = 0;
+    m_wcount = 0;
+    m_baccum_slope = 0.0;
+    m_waccum_slope = 0.0;
+}
+
 SearchResult UCTSearch::play_simulation(GameState & currstate,
                                         UCTNode* const node,
                                         float backup_pct,
-				        int depth) {
+				        int depth, bool primary_thread) {
     const auto color = currstate.get_to_move();
     auto result = SearchResult{};
 
@@ -183,11 +216,52 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
             result = SearchResult::from_score(score);
             node->update(result.blackeval(), result.whiteeval());
         } else if (m_nodes < MAX_TREE_SIZE) {
-            float blackeval, whiteeval;
+            float blackeval, whiteeval, raw_wr;
             const auto had_children = node->has_children();
-            const auto success =
-                node->create_children(m_nodes, currstate, blackeval, whiteeval,
-                                      get_min_psa_ratio());
+
+            if (!m_adjusting_up && !m_adjusting_down) {
+                check_wr();
+            }
+            bool success;
+            if ((m_adjusting_up || m_adjusting_down) && primary_thread) {
+                const auto rand_sym = Random::get_Rng().randfix<8>();
+                if (success = node->create_children(m_nodes, currstate, blackeval, whiteeval, raw_wr, get_min_psa_ratio(), rand_sym)) {
+                    auto tmpstate = currstate;
+                    //m_est_bkomi = -7.5; m_est_wkomi = -7.5;
+                    tmpstate.m_bkomi = m_est_bkomi;
+                    tmpstate.m_wkomi = m_est_wkomi;
+                    auto est_raw_wr = Network::get_scored_moves(&tmpstate, Network::Ensemble::DIRECT, rand_sym, true).raw_winrate;
+                    auto goal = m_adjusting_up ? -inv_wr(cfg_min_wr + cfg_margin) : -inv_wr(cfg_max_wr - cfg_margin);
+                    auto root_raw_wr_ = root_raw_wr();
+                    if (currstate.get_to_move() == FastBoard::BLACK) {
+                        myprintf("B | %d | %f | %f | %f | %f | %f\n", rand_sym, m_est_bkomi, currstate.m_bkomi, est_raw_wr, raw_wr, (est_raw_wr - raw_wr) / (m_est_bkomi - currstate.m_bkomi));
+                        m_baccum_slope = cfg_adj_discount * m_baccum_slope + (est_raw_wr - raw_wr) / (m_est_bkomi - currstate.m_bkomi);
+                        m_bcount++;
+                        m_est_bkomi = currstate.m_bkomi + (goal - root_raw_wr_) / m_baccum_slope * (1.0 - pow(cfg_adj_discount, m_bcount)) / (1.0 - cfg_adj_discount);
+                    }
+                    else {
+                        myprintf("W | %d | %f | %f | %f | %f | %f\n", rand_sym, m_est_wkomi, currstate.m_wkomi, est_raw_wr, raw_wr, (est_raw_wr - raw_wr) / (m_est_wkomi - currstate.m_wkomi));
+                        m_waccum_slope = cfg_adj_discount * m_waccum_slope + (est_raw_wr - raw_wr) / (m_est_wkomi - currstate.m_wkomi);
+                        m_wcount++;
+                        m_est_wkomi = currstate.m_wkomi + (goal - root_raw_wr_) / m_waccum_slope * (1.0 - pow(cfg_adj_discount, m_wcount)) / (1.0 - cfg_adj_discount);
+                    }
+                    if (m_bcount + m_wcount == cfg_adj_playouts) {
+                        m_rootstate.m_bkomi = m_est_bkomi;
+                        m_rootstate.m_wkomi = m_est_wkomi;
+                        m_adjusting_up = false;
+                        m_adjusting_down = false;
+                        m_rootstate.m_shift += goal - root_raw_wr_;
+                        NNCache::get_NNCache().clear_cache();
+                        // caution --pos, --neg
+                        myprintf("black komi: %f\n", m_est_bkomi);
+                        myprintf("white komi: %f\n", m_est_wkomi);
+                    }
+                }
+            }
+            else {
+                success = node->create_children(m_nodes, currstate, blackeval, whiteeval, raw_wr, get_min_psa_ratio());
+            }
+
             if (!had_children && success) {
                 result = SearchResult::from_eval(blackeval, whiteeval);
             }
@@ -208,7 +282,7 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
             if (backup_pct > 100.0) {
                 backup_pct = calc_backup_pct(node->get_pure_eval(FastBoard::WHITE));
             }
-            result = play_simulation(currstate, next, backup_pct, depth + 1);
+            result = play_simulation(currstate, next, backup_pct, depth + 1, primary_thread);
             result.remaining_backups++;
             if (result.valid()) {
                 if (color == FastBoard::BLACK || result.backup_type == 1 || node->get_visits() == 0) {
@@ -638,7 +712,7 @@ bool UCTSearch::stop_thinking(int elapsed_centis, int time_for_move) const {
 void UCTWorker::operator()() {
     do {
         auto currstate = std::make_unique<GameState>(m_rootstate);
-        auto result = m_search->play_simulation(*currstate, m_root, 200.0, 0);
+        auto result = m_search->play_simulation(*currstate, m_root, 200.0, 0, false);
         if (result.valid()) {
             m_search->increment_playouts();
         }
@@ -683,7 +757,7 @@ int UCTSearch::think(int color, passflag_t passflag) {
     do {
         auto currstate = std::make_unique<GameState>(m_rootstate);
 
-        auto result = play_simulation(*currstate, m_root.get(), 200.0, 0);
+        auto result = play_simulation(*currstate, m_root.get(), 200.0, 0, true);
         if (result.valid()) {
             increment_playouts();
         }
@@ -759,7 +833,7 @@ void UCTSearch::ponder() {
     auto last_output = 0;
     do {
         auto currstate = std::make_unique<GameState>(m_rootstate);
-        auto result = play_simulation(*currstate, m_root.get(), 200.0, 0);
+        auto result = play_simulation(*currstate, m_root.get(), 200.0, 0, true);
         if (result.valid()) {
             increment_playouts();
         }

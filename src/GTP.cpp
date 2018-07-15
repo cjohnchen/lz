@@ -69,6 +69,13 @@ int cfg_puct_factor;
 float cfg_backup_pct;
 int cfg_backup_type;
 bool cfg_pseudo_backup;
+
+float cfg_adj_discount = 0.9;
+float cfg_max_wr = 0.12;
+float cfg_min_wr = 0.08;
+float cfg_margin = 0.02;
+int cfg_adj_playouts = 128;
+
 float cfg_puct;
 float cfg_softmax_temp;
 float cfg_fpu_reduction;
@@ -99,7 +106,7 @@ void GTP::setup_default_parameters() {
     cfg_sgemm_exhaustive = false;
     cfg_tune_only = false;
 #endif
-    cfg_puct_factor = 1;
+    cfg_puct_factor = 2;
     cfg_backup_pct = 50.0;
     cfg_backup_type = 1;
     cfg_pseudo_backup = true;

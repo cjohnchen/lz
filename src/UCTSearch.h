@@ -104,7 +104,18 @@ public:
     void ponder();
     bool is_running() const;
     void increment_playouts();
-    SearchResult play_simulation(GameState& currstate, UCTNode* const node, float backup_pct, int depth);
+    SearchResult play_simulation(GameState& currstate, UCTNode* const node, float backup_pct, int depth, bool primary_thread);
+
+    bool m_adjusting_up;
+    bool m_adjusting_down;
+    int m_bcount;
+    int m_wcount;
+    float m_est_bkomi;
+    float m_est_wkomi;
+    float m_baccum_slope;
+    float m_waccum_slope;
+    float root_raw_wr();
+    void check_wr();
 
 private:
     float get_min_psa_ratio() const;

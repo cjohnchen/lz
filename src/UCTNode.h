@@ -44,8 +44,8 @@ public:
     ~UCTNode() = default;
 
     bool create_children(std::atomic<int>& nodecount,
-                         GameState& state, float& blackeval, float& whiteeval,
-                         float min_psa_ratio = 0.0f);
+                         GameState& state, float& blackeval, float& whiteeval, float& raw_wr,
+                         float min_psa_ratio = 0.0f, int symmetry = -1);
 
     const std::vector<UCTNodePointer>& get_children() const;
     void sort_children(int color);

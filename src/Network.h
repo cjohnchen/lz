@@ -48,8 +48,9 @@ public:
         // winrate
         float black_winrate;
         float white_winrate;
+        float raw_winrate;
 
-        Netresult() : policy(BOARD_SQUARES), policy_pass(0.0f), black_winrate(0.0f), white_winrate(0.0f) {}
+        Netresult() : policy(BOARD_SQUARES), policy_pass(0.0f), black_winrate(0.0f), white_winrate(0.0f), raw_winrate(0.0f) {}
     };
 
     static Netresult get_scored_moves(const GameState* const state,

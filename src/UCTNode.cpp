@@ -55,7 +55,9 @@ bool UCTNode::create_children(std::atomic<int>& nodecount,
                               GameState& state,
                               float& blackeval,
                               float& whiteeval,
-                              float min_psa_ratio) {
+                              float& raw_wr,
+                              float min_psa_ratio,
+                              int symmetry) {
     // check whether somebody beat us to it (atomic)
     if (!expandable(min_psa_ratio)) {
         return false;
@@ -78,11 +80,17 @@ bool UCTNode::create_children(std::atomic<int>& nodecount,
     m_is_expanding = true;
     lock.unlock();
 
-    const auto raw_netlist = Network::get_scored_moves(
-        &state, Network::Ensemble::RANDOM_SYMMETRY);
+    Network::Netresult raw_netlist;
+    if (symmetry == -1) {
+        raw_netlist = Network::get_scored_moves(&state, Network::Ensemble::RANDOM_SYMMETRY);
+    }
+    else {
+        raw_netlist = Network::get_scored_moves(&state, Network::Ensemble::DIRECT, symmetry, true);
+    }
 
     blackeval = m_net_blackeval = raw_netlist.black_winrate;
     whiteeval = m_net_whiteeval = raw_netlist.white_winrate;
+    raw_wr = raw_netlist.raw_winrate;
     update(blackeval, whiteeval);
 
     std::vector<Network::ScoreVertexPair> nodelist;

@@ -49,7 +49,14 @@ extern bool cfg_sgemm_exhaustive;
 extern bool cfg_tune_only;
 #endif
 extern int cfg_puct_factor;
+
 extern float cfg_backup_pct;
+extern float cfg_adj_discount;
+extern float cfg_max_wr;
+extern float cfg_min_wr;
+extern float cfg_margin;
+extern int cfg_adj_playouts;
+
 extern float cfg_puct;
 extern float cfg_softmax_temp;
 extern float cfg_fpu_reduction;
