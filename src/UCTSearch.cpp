@@ -72,7 +72,6 @@ private:
     std::string m_pv;
 };
 
-
 UCTSearch::UCTSearch(GameState& g)
     : m_rootstate(g) {
     set_playout_limit(cfg_max_playouts);
@@ -202,6 +201,7 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
         if (currstate.get_passes() >= 2) {
             auto score = currstate.final_score();
             result = SearchResult::from_score(score);
+            node->update(result.eval());
         } else if (m_nodes < MAX_TREE_SIZE) {
             float eval;
             const auto had_children = node->has_children();
@@ -241,12 +241,12 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
             next->invalidate();
         } else {
             result = play_simulation(currstate, next);
+            if (result.valid()) {
+                node->update(result.eval());
+            }
         }
     }
 
-    if (result.valid()) {
-        node->update(result.eval());
-    }
     node->virtual_loss_undo();
 
     return result;
@@ -310,7 +310,6 @@ void UCTSearch::output_analysis(FastState & state, UCTNode & parent) {
         // Store data in array
         float N_num_f = node->get_score() * 100.0f;
         sortable_data.emplace_back(move, node->get_visits(), move_eval, std::to_string(N_num_f), pv);
-
     }
     // Sort array to decide order
     std::stable_sort(rbegin(sortable_data), rend(sortable_data));

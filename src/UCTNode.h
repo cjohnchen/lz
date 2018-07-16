@@ -39,7 +39,7 @@ public:
     // When we visit a node, add this amount of virtual losses
     // to it to encourage other CPUs to explore other parts of the
     // search tree.
-    static constexpr auto VIRTUAL_LOSS_COUNT = 3;
+    static constexpr auto VIRTUAL_LOSS_COUNT = 1;
     // Defined in UCTNode.cpp
     explicit UCTNode(int vertex, float score);
     UCTNode() = delete;
@@ -66,6 +66,7 @@ public:
     bool active() const;
     int get_move() const;
     int get_visits() const;
+    int16_t get_virtual_loss() const;
     float get_score() const;
     void set_score(float score);
     float get_eval(int tomove) const;

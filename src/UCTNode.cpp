@@ -93,6 +93,7 @@ bool UCTNode::create_children(std::atomic<int>& nodecount,
     if (state.board.white_to_move()) {
         m_net_eval = 1.0f - m_net_eval;
     }
+    update(m_net_eval);
     eval = m_net_eval;
 
     std::vector<Network::ScoreVertexPair> nodelist;
@@ -144,20 +145,23 @@ void UCTNode::link_nodelist(std::atomic<int>& nodecount,
     const auto max_psa = nodelist[0].first;
     const auto old_min_psa = max_psa * m_min_psa_ratio_children;
     const auto new_min_psa = max_psa * min_psa_ratio;
+    const int64_t max_children = 64;
     if (new_min_psa > 0.0f) {
         m_children.reserve(
-            std::count_if(cbegin(nodelist), cend(nodelist),
-                [=](const auto& node) { return node.first >= new_min_psa; }
-            )
+            std::min(int64_t{ std::count_if(cbegin(nodelist), cend(nodelist),
+                [=](const auto& node) { return node.first >= new_min_psa; }) }, max_children)
         );
-    } else {
-        m_children.reserve(nodelist.size());
+    }
+    else {
+        m_children.reserve(std::min(uint64_t{ nodelist.size() }, uint64_t{ max_children }));
     }
 
     auto skipped_children = false;
+    int num_children = 0;
     for (const auto& node : nodelist) {
-        if (node.first < new_min_psa) {
+        if (node.first < new_min_psa || ++num_children > max_children) {
             skipped_children = true;
+            break;
         } else if (node.first < old_min_psa) {
             m_children.emplace_back(node.second, node.first);
             ++nodecount;
@@ -208,6 +212,10 @@ void UCTNode::set_score(float score) {
 
 int UCTNode::get_visits() const {
     return m_visits;
+}
+
+int16_t UCTNode::get_virtual_loss() const {
+    return m_virtual_loss;
 }
 
 // Return the true score, without taking into account virtual losses.
@@ -263,7 +271,7 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
     auto parentvisits = size_t{0};
     for (const auto& child : m_children) {
         if (child.valid()) {
-            parentvisits += child.get_visits();
+            parentvisits += child.get_visits() + int{ child.get_virtual_loss() };
             if (child.get_visits() > 0) {
                 total_visited_policy += child.get_score();
             }
@@ -279,7 +287,7 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
         fpu_reduction = cfg_fpu_reduction * std::sqrt(total_visited_policy);
     }
     // Estimated eval for unknown nodes = original parent NN eval - reduction
-    auto fpu_eval = get_net_eval(color) - fpu_reduction;
+    auto fpu_eval = get_pure_eval(color) - fpu_reduction;
 
     auto best = static_cast<UCTNodePointer*>(nullptr);
     auto best_value = std::numeric_limits<double>::lowest();
@@ -294,7 +302,7 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
             winrate = child.get_eval(color);
         }
         auto psa = child.get_score();
-        auto denom = 1.0 + child.get_visits();
+        auto denom = 1.0 + child.get_visits() + int{ child.get_virtual_loss() };
         auto puct = cfg_puct * psa * (numerator / denom);
         auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
