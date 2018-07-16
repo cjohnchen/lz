@@ -93,6 +93,7 @@
 #define MAX_CPUS 128
 #endif
 
+#define USE_HALF
 #ifdef USE_HALF
 #include "half/half.hpp"
 using net_t = half_float::half;
