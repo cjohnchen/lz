@@ -112,6 +112,7 @@ static void parse_commandline(int argc, char *argv[]) {
         ("puct", po::value<float>())
         ("softmax_temp", po::value<float>())
         ("fpu_reduction", po::value<float>())
+        ("virtual_loss", po::value<int>())
         ;
 #endif
     // These won't be shown, we use them to catch incorrect usage of the
@@ -180,6 +181,9 @@ static void parse_commandline(int argc, char *argv[]) {
     }
     if (vm.count("fpu_reduction")) {
         cfg_fpu_reduction = vm["fpu_reduction"].as<float>();
+    }
+    if (vm.count("virtual_loss")) {
+        cfg_virtual_loss = vm["virtual_loss"].as<int>();
     }
 #endif
 
