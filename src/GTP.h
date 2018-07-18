@@ -52,6 +52,7 @@ extern bool cfg_tune_only;
 extern float cfg_puct;
 extern float cfg_softmax_temp;
 extern float cfg_fpu_reduction;
+extern int cfg_virtual_loss;
 extern std::string cfg_logfile;
 extern std::string cfg_weightsfile;
 extern FILE* cfg_logfile_handle;
