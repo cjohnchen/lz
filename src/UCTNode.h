@@ -28,6 +28,7 @@
 #include <cstring>
 
 #include "GameState.h"
+#include "GTP.h"
 #include "Network.h"
 #include "SMP.h"
 #include "UCTNodePointer.h"
@@ -37,7 +38,7 @@ public:
     // When we visit a node, add this amount of virtual losses
     // to it to encourage other CPUs to explore other parts of the
     // search tree.
-    static constexpr auto VIRTUAL_LOSS_COUNT = 3;
+    static constexpr auto VIRTUAL_LOSS_COUNT = cfg_virtual_loss;
     // Defined in UCTNode.cpp
     explicit UCTNode(int vertex, float score);
     UCTNode() = delete;
