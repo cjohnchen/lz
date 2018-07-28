@@ -197,9 +197,8 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
     node->virtual_loss();
 
     if (node->expandable()) {
-        if (currstate.get_passes() >= 2) {
-            auto score = currstate.final_score();
-            result = SearchResult::from_score(score);
+        if (currstate.get_passes() == 1) {
+            result = SearchResult::from_eval(color == FastBoard::BLACK? 1.0f : 0.0f);
         } else if (m_nodes < MAX_TREE_SIZE) {
             float eval;
             const auto had_children = node->has_children();
