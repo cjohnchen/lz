@@ -79,6 +79,7 @@ bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_cpu_only;
+bool cfg_cudnn;
 int cfg_analyze_interval_centis;
 
 std::unique_ptr<Network> GTP::s_network;
@@ -129,6 +130,9 @@ void GTP::setup_default_parameters() {
     cfg_cpu_only = true;
 #else
     cfg_cpu_only = false;
+#endif
+#ifdef USE_CUDNN
+    cfg_cudnn = false;
 #endif
 
     cfg_analyze_interval_centis = 0;
@@ -362,6 +366,7 @@ bool GTP::execute(GameState & game, std::string xinput) {
             cmdstream >> vertex;
 
             if (!cmdstream.fail()) {
+                myprintf("'%s'\n", vertex.c_str());
                 if (!game.play_textmove(color, vertex)) {
                     gtp_fail_printf(id, "illegal move");
                 } else {
