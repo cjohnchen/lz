@@ -83,6 +83,7 @@ public:
     UCTNode* get_nopass_child(FastState& state) const;
     std::unique_ptr<UCTNode> find_child(const int move);
     void inflate_all_children();
+    bool m_is_expanding{false};
 
 private:
     enum Status : char {
@@ -114,7 +115,6 @@ private:
     std::atomic<double> m_blackevals{0.0};
     std::atomic<Status> m_status{ACTIVE};
     // Is someone adding policy priors to this node?
-    bool m_is_expanding{false};
     SMP::Mutex m_nodemutex;
 
     // Tree data
