@@ -24,6 +24,11 @@
 #include "CuDNNScheduler.h"
 #include "Utils.h"
 
+using Utils::myprintf;
+
+static std::atomic<size_t> batch_index;
+extern std::atomic<size_t> batch_stats[];
+
 static void bn_stddivs_to_conv(std::vector<float>& w,
                                const std::vector<float>& bn_stddivs,
                                std::vector<float>& bn_means,
@@ -123,30 +128,44 @@ void CuDNNScheduler<net_t>::initialize(const int channels) {
         gpus = {-1};
     }
 
+    for(auto i = size_t{0}; i < MAX_BATCH+1; i++) {
+        batch_stats[i] = 0;
+    }
+
     auto silent{false};
     auto gnum = size_t{0};
 
-    // launch the worker thread.  round_up(cfg_num_threads / gpus.size()) threads
-    // so that we only have enough contexts to achieve full parallelism.
-    const auto num_threads = (cfg_num_threads + gpus.size() - 1) / gpus.size();
-    m_context_pool.resize(num_threads);
-
     for (auto gpu : gpus) {
-        auto cudnn = std::make_unique<CuDNN<net_t>>();
-        auto net = std::make_unique<CuDNN_Network<net_t>>(*cudnn);
-        cudnn->initialize(channels, gpu, silent);
-        m_cudnn.push_back(std::move(cudnn));
-        m_networks.push_back(std::move(net));
+        m_cudnn.emplace_back();
+        m_networks.emplace_back();
+
+        {
+            auto cudnn = std::make_unique<CuDNN<net_t>>();
+            auto net = std::make_unique<CuDNN_Network<net_t>>(*cudnn);
+            cudnn->initialize(channels, gpu, silent, 1);
+            m_cudnn[gnum].push_back(std::move(cudnn));
+            m_networks[gnum].push_back(std::move(net));
+        }
+        {
+            auto cudnn = std::make_unique<CuDNN<net_t>>();
+            auto net = std::make_unique<CuDNN_Network<net_t>>(*cudnn);
+            cudnn->initialize(channels, gpu, silent, cfg_batch_size);
+            m_cudnn[gnum].push_back(std::move(cudnn));
+            m_networks[gnum].push_back(std::move(net));
+        }
 
         // starting next GPU, let's not dump full list of GPUs
         silent = true;
 
-        for (auto i = size_t{0}; i < num_threads; i++) {
-            m_context_pool[i].emplace_back(std::make_shared<ContextPoolEntry>(gnum));
+        for(int i=0; i<2; i++) {
+            auto t = std::thread(&CuDNNScheduler<net_t>::batch_worker, this, gnum);
+            m_worker_threads.push_back(std::move(t));
         }
         gnum++;
     }
 }
+
+
 
 template <typename net_t>
 void CuDNNScheduler<net_t>::push_input_convolution(unsigned int filter_size,
@@ -155,32 +174,34 @@ void CuDNNScheduler<net_t>::push_input_convolution(unsigned int filter_size,
                                                     const std::vector<float>& weights,
                                                     const std::vector<float>& means,
                                                     const std::vector<float>& variances) {
-    for (const auto& cudnn_net : m_networks) {
-        std::vector<float> weights_conv = std::vector<float>(weights);
-        std::vector<float> means_conv = std::vector<float>(means);
+    for (const auto& net2 : m_networks) {
+        for (const auto& cudnn_net : net2) {
+            std::vector<float> weights_conv = std::vector<float>(weights);
+            std::vector<float> means_conv = std::vector<float>(means);
 
-        bn_stddivs_to_conv(weights_conv,
-                           variances,
-                           means_conv,
-                           outputs, channels);
+            bn_stddivs_to_conv(weights_conv,
+                               variances,
+                               means_conv,
+                               outputs, channels);
 
-        float scale = 1.0f;
-        if (typeid(net_t) == typeid(int8_t)) {
-            scale = 127.0f/abs_max(weights_conv);
-            weights_conv = scale_weights(weights_conv, scale, true);
-            weights_conv = KCRS_to_KRSC<float>(weights_conv,
-                                               outputs,
-                                               channels,
-                                               filter_size,
-                                               filter_size);
+            float scale = 1.0f;
+            if (typeid(net_t) == typeid(int8_t)) {
+                scale = 127.0f/abs_max(weights_conv);
+                weights_conv = scale_weights(weights_conv, scale, true);
+                weights_conv = KCRS_to_KRSC<float>(weights_conv,
+                                                   outputs,
+                                                   channels,
+                                                   filter_size,
+                                                   filter_size);
 
-            means_conv = scale_weights(means_conv, input_scale_int8, false);
+                means_conv = scale_weights(means_conv, input_scale_int8, false);
+            }
+
+            cudnn_net->push_input_convolution(
+                filter_size, channels, outputs,
+                weights_conv, means_conv, scale
+            );
         }
-
-        cudnn_net->push_input_convolution(
-            filter_size, channels, outputs,
-            weights_conv, means_conv, scale
-        );
     }
 }
 
@@ -194,58 +215,61 @@ void CuDNNScheduler<net_t>::push_residual(unsigned int filter_size,
                                            const std::vector<float>& weights_2,
                                            const std::vector<float>& means_2,
                                            const std::vector<float>& variances_2) {
-    for (const auto& cudnn_net : m_networks) {
-        std::vector<float> weights_1_conv = std::vector<float>(weights_1);
-        std::vector<float> means_1_conv = std::vector<float>(means_1);
-        std::vector<float> weights_2_conv = std::vector<float>(weights_2);
-        std::vector<float> means_2_conv = std::vector<float>(means_2);
 
-        bn_stddivs_to_conv(weights_1_conv,
-                           variances_1,
-                           means_1_conv,
-                           outputs, channels);
+    for (const auto& net2 : m_networks) {
+        for (const auto& cudnn_net : net2) {
+            std::vector<float> weights_1_conv = std::vector<float>(weights_1);
+            std::vector<float> means_1_conv = std::vector<float>(means_1);
+            std::vector<float> weights_2_conv = std::vector<float>(weights_2);
+            std::vector<float> means_2_conv = std::vector<float>(means_2);
 
-        bn_stddivs_to_conv(weights_2_conv,
-                           variances_2,
-                           means_2_conv,
-                           outputs, channels);
+            bn_stddivs_to_conv(weights_1_conv,
+                               variances_1,
+                               means_1_conv,
+                               outputs, channels);
 
-        /* Convolution alpha */
-        float scale_1 = 1.0f;
-        float scale_2 = 1.0f;
-        /* Residual add alpha */
-        float scale_3 = 1.0f;
+            bn_stddivs_to_conv(weights_2_conv,
+                               variances_2,
+                               means_2_conv,
+                               outputs, channels);
 
-        if (typeid(net_t) == typeid(int8_t)) {
-            scale_1 = 127.0f/abs_max(weights_1_conv);
-            scale_2 = 127.0f/abs_max(weights_2_conv);
-            weights_1_conv = scale_weights(weights_1_conv, scale_1, true);
-            weights_2_conv = scale_weights(weights_2_conv, scale_2, true);
+            /* Convolution alpha */
+            float scale_1 = 1.0f;
+            float scale_2 = 1.0f;
+            /* Residual add alpha */
+            float scale_3 = 1.0f;
 
-            weights_1_conv = KCRS_to_KRSC<float>(weights_1_conv,
-                                                 outputs,
-                                                 channels,
-                                                 filter_size,
-                                                 filter_size);
+            if (typeid(net_t) == typeid(int8_t)) {
+                scale_1 = 127.0f/abs_max(weights_1_conv);
+                scale_2 = 127.0f/abs_max(weights_2_conv);
+                weights_1_conv = scale_weights(weights_1_conv, scale_1, true);
+                weights_2_conv = scale_weights(weights_2_conv, scale_2, true);
 
-            weights_2_conv = KCRS_to_KRSC<float>(weights_2_conv,
-                                                 outputs,
-                                                 channels,
-                                                 filter_size,
-                                                 filter_size);
+                weights_1_conv = KCRS_to_KRSC<float>(weights_1_conv,
+                                                     outputs,
+                                                     channels,
+                                                     filter_size,
+                                                     filter_size);
 
-            means_1_conv = scale_weights(means_1_conv, input_scale_int8, false);
-            means_2_conv = scale_weights(means_2_conv, input_scale_int8, false);
+                weights_2_conv = KCRS_to_KRSC<float>(weights_2_conv,
+                                                     outputs,
+                                                     channels,
+                                                     filter_size,
+                                                     filter_size);
+
+                means_1_conv = scale_weights(means_1_conv, input_scale_int8, false);
+                means_2_conv = scale_weights(means_2_conv, input_scale_int8, false);
+            }
+
+            cudnn_net->push_residual(filter_size, channels, outputs,
+                                      weights_1_conv,
+                                      means_1_conv,
+                                      weights_2_conv,
+                                      means_2_conv,
+                                      scale_1,
+                                      scale_2,
+                                      scale_3);
         }
-
-        cudnn_net->push_residual(filter_size, channels, outputs,
-                                  weights_1_conv,
-                                  means_1_conv,
-                                  weights_2_conv,
-                                  means_2_conv,
-                                  scale_1,
-                                  scale_2,
-                                  scale_3);
     }
 }
 
@@ -254,15 +278,19 @@ void CuDNNScheduler<net_t>::push_convolve(unsigned int filter_size,
                                            unsigned int channels,
                                            unsigned int outputs,
                                            const std::vector<float>& weights) {
-    for (const auto & cudnn_net : m_networks) {
-        cudnn_net->push_convolve(filter_size, channels, outputs, weights);
+    for (const auto& net2 : m_networks) {
+        for (const auto& cudnn_net : net2) {
+            cudnn_net->push_convolve(filter_size, channels, outputs, weights);
+        }
     }
 }
 
 template <typename net_t>
 void CuDNNScheduler<net_t>::set_scales(const std::vector<float>& activations, const float activation_scale) {
-    for (const auto & cudnn_net : m_networks) {
-        cudnn_net->set_scales(activations, activation_scale);
+    for (const auto& net2 : m_networks) {
+        for (const auto& cudnn_net : net2) {
+            cudnn_net->set_scales(activations, activation_scale);
+        }
     }
 }
 
@@ -271,57 +299,93 @@ void CuDNNScheduler<net_t>::activations(const std::vector<float>& input,
                                         Activations<float>& activations,
                                         std::vector<float>& output_pol,
                                         std::vector<float>& output_val) {
-    std::shared_ptr<ContextPoolEntry> ctx;
-    auto queue_num = size_t{0};
-    {
-        LOCK(m_context_pool_mutex, lock);
-        while (queue_num < m_context_pool.size()) {
-            if (!m_context_pool[queue_num].empty()) {
-                ctx = std::move(m_context_pool[queue_num].front());
-                m_context_pool[queue_num].pop_front();
-                break;
-            }
-            queue_num++;
-        }
-        // if this failed, it means we ran out of contexts
-        // which should be more than or equal to the number of threads
-        assert(ctx != nullptr);
-    }
-
-    m_networks[ctx->net_index]->forward_activations(input, output_pol, output_val, ctx->context, &activations, 1);
-
-    {
-        LOCK(m_context_pool_mutex, lock);
-        m_context_pool[queue_num].push_back(std::move(ctx));
-    }
+    //TODO
 }
 
 template <typename net_t>
 void CuDNNScheduler<net_t>::forward(const std::vector<float>& input,
-                                     std::vector<float>& output_pol,
-                                     std::vector<float>& output_val) {
-    std::shared_ptr<ContextPoolEntry> ctx;
-    auto queue_num = size_t{0};
+                                    std::vector<float>& output_pol,
+                                    std::vector<float>& output_val) {
+    auto entry = std::make_shared<ForwardQueueEntry>(input, output_pol, output_val);
+    std::unique_lock<std::mutex> lk(entry->mutex);
+#ifdef USE_LOCK_FREE_QUEUE
+    m_forward_queue.enqueue(entry);
+#else
     {
-        LOCK(m_context_pool_mutex, lock);
-        while (queue_num < m_context_pool.size()) {
-            if (!m_context_pool[queue_num].empty()) {
-                ctx = std::move(m_context_pool[queue_num].front());
-                m_context_pool[queue_num].pop_front();
-                break;
-            }
-            queue_num++;
-        }
-        // if this failed, it means we ran out of contexts
-        // which should be more than or equal to the number of threads
-        assert(ctx != nullptr);
+        std::unique_lock<std::mutex> lk(m_mutex);
+        m_forward_queue.push_back(entry);
     }
+    m_cv.notify_one();
+#endif
+    entry->cv.wait(lk);
+}
 
-    m_networks[ctx->net_index]->forward(input, output_pol, output_val, ctx->context);
 
-    {
-        LOCK(m_context_pool_mutex, lock);
-        m_context_pool[queue_num].push_back(std::move(ctx));
+template <typename net_t>
+void CuDNNScheduler<net_t>::batch_worker(const size_t gnum) {
+    std::vector<CuDNNContext> contexts(2);
+    myprintf("worker %d started, batch size %d\n", gnum, cfg_batch_size);
+    while (true) {
+        std::list<std::shared_ptr<ForwardQueueEntry>> inputs;
+        size_t count = 0;
+
+        {
+            std::unique_lock<std::mutex> lk(m_mutex);
+            while (true) {
+                if(!m_running) return;
+                count = std::min(m_forward_queue.size(), size_t(cfg_batch_size));
+                if (count > 0 && count < cfg_batch_size) {
+                    count = 1;
+                }
+                if (count > 0) {
+                    auto begin = m_forward_queue.begin();
+                    auto end = begin;
+                    std::advance(end, count);
+                    std::move(begin, end, std::back_inserter(inputs));
+                    m_forward_queue.erase(begin, end);
+                    break;
+                }
+                else {
+                    m_cv.wait(lk, [this](){ return !m_running || !m_forward_queue.empty(); });
+                }
+            }
+        }
+
+        auto & context = contexts[count == 1 ? 0 : 1];
+        auto batch_input = std::vector<float>(Network::INPUT_CHANNELS * BOARD_SIZE * BOARD_SIZE * count);
+        auto batch_output_pol = std::vector<float>(Network::OUTPUTS_POLICY * BOARD_SIZE * BOARD_SIZE * count);
+        auto batch_output_val = std::vector<float>(Network::OUTPUTS_VALUE * BOARD_SIZE * BOARD_SIZE * count);
+
+        batch_index++;
+        batch_stats[count]++;
+
+        {
+            size_t index = 0;
+            for (auto it = inputs.begin(); it != inputs.end(); ++it) {
+                std::unique_lock<std::mutex> lk((*it)->mutex);
+                std::copy((*it)->in.begin(), (*it)->in.end(), batch_input.begin() + Network::INPUT_CHANNELS * BOARD_SIZE * BOARD_SIZE * index);
+                index++;
+            }
+        }
+
+        {
+            m_networks[gnum][count == 1 ? 0 : 1]->forward(
+                batch_input, batch_output_pol, batch_output_val, context, count);
+        }
+
+        {
+            size_t index = 0;
+            for (auto it = inputs.begin(); it != inputs.end(); ++it) {
+                std::copy(batch_output_pol.begin() + Network::OUTPUTS_POLICY * BOARD_SIZE * BOARD_SIZE * index,
+                          batch_output_pol.begin() + Network::OUTPUTS_POLICY * BOARD_SIZE * BOARD_SIZE * (index + 1),
+                          (*it)->out_p.begin());
+                std::copy(batch_output_val.begin() + Network::OUTPUTS_VALUE * BOARD_SIZE * BOARD_SIZE * index,
+                          batch_output_val.begin() + Network::OUTPUTS_VALUE * BOARD_SIZE * BOARD_SIZE * (index + 1),
+                          (*it)->out_v.begin());
+                (*it)->cv.notify_all();
+                index++;
+            }
+        }
     }
 }
 

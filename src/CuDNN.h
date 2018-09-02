@@ -153,11 +153,13 @@ class CuDNN {
     friend class CuDNN_Layer;
 public:
     void initialize(const int channels, const int gpu,
-                    bool silent = false);
+                    bool silent = false, int batch_size = 1);
     void ensure_thread_initialized(void);
     std::string get_device_name();
 
     std::vector<size_t> get_sgemm_tuners(void);
+
+    int m_batch_size = 1;
 
 private:
 

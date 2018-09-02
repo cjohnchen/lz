@@ -47,6 +47,9 @@ private:
     const std::vector<float>& m_f;
 };
 
+static std::atomic<size_t> batch_index;
+std::atomic<size_t> batch_stats[MAX_BATCH+1];
+
 template <typename T>
 static std::vector<T> zeropad_U(const std::vector<float>& U,
                                 const int outputs, const int channels,
@@ -85,6 +88,9 @@ void OpenCLScheduler<net_t>::initialize(const int channels) {
     // put a minus one GPU index here.
     if (gpus.empty()) {
         gpus = {-1};
+    }
+    for(auto i = size_t{0}; i < MAX_BATCH+1; i++) {
+        batch_stats[i] = 0;
     }
 
     auto silent{false};
@@ -141,27 +147,29 @@ void OpenCLScheduler<net_t>::push_input_convolution(unsigned int filter_size,
                                                     const std::vector<float>& means,
                                                     const std::vector<float>& variances) {
 
-    for (const auto& opencl_net : m_networks) {
-        const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
+    for (const auto& net2 : m_networks) {
+        for (const auto& opencl_net : net2) {
+            const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
 
-        const auto mwg = tuners[0];
-        const auto kwg = tuners[2];
-        const auto vwm = tuners[3];
+            const auto mwg = tuners[0];
+            const auto kwg = tuners[2];
+            const auto vwm = tuners[3];
 
-        const auto m_ceil = ceilMultiple(ceilMultiple(outputs, mwg), vwm);
-        const auto k_ceil = ceilMultiple(ceilMultiple(channels, kwg), vwm);
+            const auto m_ceil = ceilMultiple(ceilMultiple(outputs, mwg), vwm);
+            const auto k_ceil = ceilMultiple(ceilMultiple(channels, kwg), vwm);
 
-        auto weights_w = Network::winograd_transform_f(weights,
-                                                      outputs,
-                                                      channels);
+            auto weights_w = Network::winograd_transform_f(weights,
+                                                          outputs,
+                                                          channels);
 
-        const auto Upad = zeropad_U<net_t>(weights_w,
-                                           outputs, channels,
-                                           m_ceil, k_ceil);
-        opencl_net->push_input_convolution(
-            filter_size, channels, outputs,
-            Upad, from_float(means), from_float(variances)
-        );
+            const auto Upad = zeropad_U<net_t>(weights_w,
+                                               outputs, channels,
+                                               m_ceil, k_ceil);
+            opencl_net->push_input_convolution(
+                filter_size, channels, outputs,
+                Upad, from_float(means), from_float(variances)
+            );
+        };
     }
 }
 
@@ -176,35 +184,37 @@ void OpenCLScheduler<net_t>::push_residual(unsigned int filter_size,
                                            const std::vector<float>& means_2,
                                            const std::vector<float>& variances_2) {
 
-    for (const auto& opencl_net : m_networks) {
-        const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
+    for (const auto& net2 : m_networks) {
+        for (const auto& opencl_net : net2) {
+            const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
 
-        const auto mwg = tuners[0];
-        const auto vwm = tuners[3];
+            const auto mwg = tuners[0];
+            const auto vwm = tuners[3];
 
-        const auto m_ceil = ceilMultiple(ceilMultiple(outputs, mwg), vwm);
+            const auto m_ceil = ceilMultiple(ceilMultiple(outputs, mwg), vwm);
 
-        auto weights_1_w = Network::winograd_transform_f(weights_1,
-                                                         outputs,
-                                                         channels);
+            auto weights_1_w = Network::winograd_transform_f(weights_1,
+                                                             outputs,
+                                                             channels);
 
-        auto weights_2_w = Network::winograd_transform_f(weights_2,
-                                                         outputs,
-                                                         channels);
+            auto weights_2_w = Network::winograd_transform_f(weights_2,
+                                                             outputs,
+                                                             channels);
 
-        const auto Upad1 = zeropad_U<net_t>(weights_1_w,
-                                            outputs, outputs,
-                                            m_ceil, m_ceil);
-        const auto Upad2 = zeropad_U<net_t>(weights_2_w,
-                                            outputs, outputs,
-                                            m_ceil, m_ceil);
-        opencl_net->push_residual(filter_size, channels, outputs,
-                                  Upad1,
-                                  from_float(means_1),
-                                  from_float(variances_1),
-                                  Upad2,
-                                  from_float(means_2),
-                                  from_float(variances_2));
+            const auto Upad1 = zeropad_U<net_t>(weights_1_w,
+                                                outputs, outputs,
+                                                m_ceil, m_ceil);
+            const auto Upad2 = zeropad_U<net_t>(weights_2_w,
+                                                outputs, outputs,
+                                                m_ceil, m_ceil);
+            opencl_net->push_residual(filter_size, channels, outputs,
+                                      Upad1,
+                                      from_float(means_1),
+                                      from_float(variances_1),
+                                      Upad2,
+                                      from_float(means_2),
+                                      from_float(variances_2));
+        }
     }
 }
 
@@ -237,9 +247,6 @@ void OpenCLScheduler<net_t>::forward(const std::vector<float>& input,
 #endif
     entry->cv.wait(lk);
 }
-
-std::atomic<size_t> batch_index;
-std::atomic<size_t> batch_stats[MAX_BATCH+1];
 
 template <typename net_t>
 void OpenCLScheduler<net_t>::batch_worker(const size_t gnum) {

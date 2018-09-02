@@ -37,6 +37,18 @@ class CuDNNScheduler : public ForwardPipe {
         CuDNNContext context;
         ContextPoolEntry(size_t index) : net_index(index) {}
     };
+    class ForwardQueueEntry {
+    public:
+      std::mutex mutex;
+      std::condition_variable cv;
+      const std::vector<float>& in;
+      std::vector<float>& out_p;
+      std::vector<float>& out_v;
+      ForwardQueueEntry(const std::vector<float>& input,
+                        std::vector<float>& output_pol,
+                        std::vector<float>& output_val) : in(input), out_p(output_pol), out_v(output_val)
+        {}
+    };
 public:
     virtual void initialize(const int channels);
     virtual void forward(const std::vector<float>& input,
@@ -73,13 +85,16 @@ public:
     void set_scales(const std::vector<float>& activations, const float activation_scale);
 
 private:
-    std::vector<std::unique_ptr<CuDNN_Network<net_t>>> m_networks;
-    std::vector<std::unique_ptr<CuDNN<net_t>>> m_cudnn;
+    bool m_running = true;
+    std::vector<std::vector<std::unique_ptr<CuDNN_Network<net_t>>>> m_networks;
+    std::vector<std::vector<std::unique_ptr<CuDNN<net_t>>>> m_cudnn;
 
-    using ContextPoolQueue = std::list<std::shared_ptr<ContextPoolEntry>>;
-    std::vector<ContextPoolQueue> m_context_pool;
+    std::mutex m_mutex;
+    std::condition_variable m_cv;
+    std::list<std::shared_ptr<ForwardQueueEntry>> m_forward_queue;
+    std::list<std::thread> m_worker_threads;
 
-    SMP::Mutex m_context_pool_mutex;
+    void batch_worker(const size_t gnum);
 };
 
 #endif

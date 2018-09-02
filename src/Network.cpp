@@ -436,9 +436,9 @@ void Network::initialize(int playouts, const std::string & weightsfile) {
                 {
                     myprintf("Generating int8 calibration\n");
                     myprintf("Initializing CuDNN (single precision).\n");
-                    auto cudnn_fp32 = init_net(std::make_unique<CuDNNScheduler<float>>());
-                    auto activations = get_activations(*cudnn_fp32);
-                    //std::vector<float> activations = {4.5, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.00, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0};
+                    //auto cudnn_fp32 = init_net(std::make_unique<CuDNNScheduler<float>>());
+                    //auto activations = get_activations(*cudnn_fp32);
+                    std::vector<float> activations = {4.5, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.00, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0, 7.0, 20.0};
                     myprintf("Initializing CuDNN (int8 precision).\n");
                     m_forward = init_net(std::make_unique<CuDNNScheduler<int8_t>>());
                     m_forward->set_scales(activations, 127.0f);
@@ -510,10 +510,8 @@ void Network::initialize(int playouts, const std::string & weightsfile) {
                 myprintf("Initializing OpenCL (half precision).\n");
                 m_forward = init_net(
                     std::make_unique<OpenCLScheduler<half_float::half>>());
-                break;
                 m_forward = init_net(std::make_unique<OpenCLScheduler<half_float::half>>());
-            }
-            break;
+                break;
             case precision_t::INT8: {
                 throw std::runtime_error("Int8 precision not supported by the OpenCL backend.");
             }

@@ -220,8 +220,8 @@ std::vector<float> get_activations(CuDNNScheduler<float> &scheduler) {
     GameState state;
     state.init_game(BOARD_SIZE, 7.5);
 
-    std::vector<float> policy_data(Network::OUTPUTS_POLICY * BOARD_SQUARES);
-    std::vector<float> value_data(Network::OUTPUTS_VALUE * BOARD_SQUARES);
+    std::vector<float> policy_data(Network::OUTPUTS_POLICY * NUM_INTERSECTIONS);
+    std::vector<float> value_data(Network::OUTPUTS_VALUE * NUM_INTERSECTIONS);
 
     std::vector<float> activations_acc;
 
@@ -259,7 +259,7 @@ std::vector<float> get_activations(CuDNNScheduler<float> &scheduler) {
     std::vector<std::vector<float>> planes;
 
     auto n = 0;
-    std::vector<float> plane(BOARD_SQUARES * 18);
+    std::vector<float> plane(NUM_INTERSECTIONS * 18);
 
     auto p = 0;
 
@@ -280,7 +280,7 @@ std::vector<float> get_activations(CuDNNScheduler<float> &scheduler) {
             auto h = hex_to_int(line[i]);
             /* History planes */
             if ( n % 19 < 16 ) {
-                if (i == BOARD_SQUARES/4 - 1) {
+                if (i == NUM_INTERSECTIONS/4 - 1) {
                     plane[p++] = bool(h & (1 << 0));
                 } else {
                     plane[p++] = bool(h & (1 << 3));
@@ -291,10 +291,10 @@ std::vector<float> get_activations(CuDNNScheduler<float> &scheduler) {
                 /* Last digit has only one bit */
             } else if ( n % 19 == 16 ) {
                 /* To move planes */
-                for (auto j = 0; j < BOARD_SQUARES; j++) {
+                for (auto j = 0; j < NUM_INTERSECTIONS; j++) {
                     plane[p++] = !bool(h);
                 }
-                for (auto j = 0; j < BOARD_SQUARES; j++) {
+                for (auto j = 0; j < NUM_INTERSECTIONS; j++) {
                     plane[p++] = bool(h);
                 }
                 if (skip_n == skip) {

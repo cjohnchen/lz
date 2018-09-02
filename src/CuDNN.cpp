@@ -50,17 +50,17 @@ using namespace Utils;
     }                                                        \
   }
 
-auto constexpr BATCH_SIZE = 1;
-
 void int8_to_float(int8_t *input, float *output, size_t N);
 void scale_float_tensor(float *input, float scale, size_t N);
 
 template <typename net_t>
 void CuDNN<net_t>::initialize(const int channels, const int gpu,
-                       bool silent) {
+                       bool silent, int batch_size) {
 
     /* For compatibility with OpenCL implementation */
     (void)channels;
+
+    m_batch_size = batch_size;
 
     auto best_bandwidth = 0.0f;
     auto found_device = false;
@@ -228,7 +228,7 @@ size_t CuDNN<net_t>::convolve_init(int channels, int outputs, int kernel_size,
     checkCUDNN(cudnnSetTensor4dDescriptor(conv_desc.input_descriptor,
                                       /*format=*/tensor_format,
                                       /*dataType=*/data_type,
-                                      /*batch_size=*/BATCH_SIZE,
+                                      /*batch_size=*/m_batch_size,
                                       /*channels=*/channels,
                                       /*image_height=*/BOARD_SIZE,
                                       /*image_width=*/BOARD_SIZE));
@@ -237,7 +237,7 @@ size_t CuDNN<net_t>::convolve_init(int channels, int outputs, int kernel_size,
     checkCUDNN(cudnnSetTensor4dDescriptor(conv_desc.output_descriptor,
                                       /*format=*/tensor_format,
                                       /*dataType=*/data_type,
-                                      /*batch_size=*/BATCH_SIZE,
+                                      /*batch_size=*/m_batch_size,
                                       /*channels=*/outputs,
                                       /*image_height=*/BOARD_SIZE,
                                       /*image_width=*/BOARD_SIZE));
@@ -246,7 +246,7 @@ size_t CuDNN<net_t>::convolve_init(int channels, int outputs, int kernel_size,
     checkCUDNN(cudnnSetTensor4dDescriptor(conv_desc.bias_descriptor,
                                       /*format=*/tensor_format,
                                       /*dataType=*/bias_type,
-                                      /*batch_size=*/BATCH_SIZE,
+                                      /*batch_size=*/m_batch_size,
                                       /*channels=*/outputs,
                                       /*image_height=*/1,
                                       /*image_width=*/1));
@@ -624,9 +624,9 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                             const int batch_size) {
 
     /* Always allocates enough space for floats */
-    constexpr auto one_plane = BOARD_SQUARES * sizeof(float);
-    const auto pol_elements = m_layers[m_layers.size()-2].outputs * BOARD_SQUARES;
-    const auto val_elements = m_layers.back().outputs * BOARD_SQUARES;
+    constexpr auto one_plane = NUM_INTERSECTIONS * sizeof(float);
+    const auto pol_elements = batch_size * m_layers[m_layers.size()-2].outputs * NUM_INTERSECTIONS;
+    const auto val_elements = batch_size * m_layers.back().outputs * NUM_INTERSECTIONS;
 
     /* FIXME: Needs to be half for half, float for single and int8 */
     auto pol_net_t = std::vector<float>(pol_elements);
@@ -640,7 +640,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
             max_channels = std::max(max_channels,
                                 std::max(layer.channels, layer.outputs));
         }
-        auto alloc_insize = BATCH_SIZE * max_channels * one_plane;
+        auto alloc_insize = batch_size * max_channels * one_plane;
 
         void *d_workspace;
         auto err = cudaMalloc((void**)&d_workspace, max_wsize);
@@ -680,8 +680,8 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
 
     /* Input must be padded with zeros when using int8 since the channels
      * are padded to 20 to be multiple of 4 */
-    const auto inSize = BATCH_SIZE * sizeof(net_t) * m_layers[0].channels * BOARD_SQUARES;
-    auto input_net_t = std::vector<net_t>(BATCH_SIZE * m_layers[0].channels * BOARD_SQUARES);
+    const auto inSize = batch_size * sizeof(net_t) * m_layers[0].channels * NUM_INTERSECTIONS;
+    auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
 
     auto output_t_size = sizeof(net_t);
     if (typeid(net_t) == typeid(int8_t)) {
@@ -698,7 +698,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
     }
 
     if (typeid(net_t) == typeid(int8_t)) {
-        input_net_t = NCHW_to_NHWC<net_t>(input_net_t, BATCH_SIZE, BOARD_SIZE, BOARD_SIZE, m_layers[0].channels);
+        input_net_t = NCHW_to_NHWC<net_t>(input_net_t, batch_size, BOARD_SIZE, BOARD_SIZE, m_layers[0].channels);
     }
 
     auto err = cudaMemcpy(InBuffer, (net_t*)&input_net_t[0], inSize, cudaMemcpyHostToDevice);
@@ -724,11 +724,11 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                      layer.conv_desc,
                      layer.scale_1);
             if (activations != nullptr) {
-                activation_statistics(OutBuffer, activations[0], layer.outputs * BOARD_SQUARES);
+                activation_statistics(OutBuffer, activations[0], layer.outputs * NUM_INTERSECTIONS);
             }
 
-            //std::vector<net_t> output(layer.outputs * BOARD_SQUARES);
-            //cudaMemcpy(&output[0], OutBuffer, layer.outputs * BOARD_SQUARES * sizeof(net_t), cudaMemcpyDeviceToHost);
+            //std::vector<net_t> output(layer.outputs * NUM_INTERSECTIONS);
+            //cudaMemcpy(&output[0], OutBuffer, layer.outputs * NUM_INTERSECTIONS * sizeof(net_t), cudaMemcpyDeviceToHost);
             //if (typeid(net_t) == typeid(int8_t)) {
             //    output = NHWC_to_NCHW<net_t>(output, batch_size, BOARD_SIZE, BOARD_SIZE, layer.outputs);
             //}
@@ -765,7 +765,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                      layer.scale_1);
 
             if (activations != nullptr) {
-                activation_statistics(OutBuffer, activations[0], layer.outputs * BOARD_SQUARES);
+                activation_statistics(OutBuffer, activations[0], layer.outputs * NUM_INTERSECTIONS);
             }
 
             m_cudnn.convolveActivation(OutBuffer,
@@ -780,20 +780,20 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                          layer.scale_3);
 
             if (activations != nullptr) {
-                activation_statistics(ResidualBuffer, activations[0], layer.outputs * BOARD_SQUARES);
+                activation_statistics(ResidualBuffer, activations[0], layer.outputs * NUM_INTERSECTIONS);
             }
 
             std::swap(InBuffer, ResidualBuffer);
             if (typeid(net_t) == typeid(int8_t) && niter->is_convolve1) {
                 /* Convert to float for convolve1 */
-                int8_to_float((int8_t*)InBuffer, (float*)OutBuffer, BATCH_SIZE * layer.outputs * BOARD_SQUARES);
+                int8_to_float((int8_t*)InBuffer, (float*)OutBuffer, batch_size * layer.outputs * NUM_INTERSECTIONS);
                 std::swap(InBuffer, OutBuffer);
             }
         } else {
             assert(layer.is_convolve1);
             //if (niter == std::end(m_layers)) {
-            //    std::vector<float> output(layer.channels * BOARD_SQUARES);
-            //    cudaMemcpy(&output[0], InBuffer, layer.channels * BOARD_SQUARES * sizeof(float), cudaMemcpyDeviceToHost);
+            //    std::vector<float> output(layer.channels * NUM_INTERSECTIONS);
+            //    cudaMemcpy(&output[0], InBuffer, layer.channels * NUM_INTERSECTIONS * sizeof(float), cudaMemcpyDeviceToHost);
             //    if (typeid(net_t) == typeid(int8_t)) {
             //        output = NHWC_to_NCHW<float>(output, batch_size, BOARD_SIZE, BOARD_SIZE, layer.channels);
             //    }
