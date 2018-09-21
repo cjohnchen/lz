@@ -109,6 +109,7 @@ static constexpr auto MAX_CPUS = 64;
 static constexpr auto MAX_CPUS = 128;
 #endif
 
+#define USE_HALF
 #ifdef USE_HALF
 #include "half/half.hpp"
 #endif
