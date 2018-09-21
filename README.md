@@ -69,7 +69,7 @@ If you prefer a more human style, a network trained from human games is availabl
 ## Requirements
 
 * GCC, Clang or MSVC, any C++14 compiler
-* Boost 1.58.x or later, headers and program_options library (libboost-dev & libboost-program-options-dev on Debian/Ubuntu)
+* Boost 1.58.x or later, headers and program_options, filesystem and system libraries (libboost-dev, libboost-program-options-dev and libboost-filesystem-dev on Debian/Ubuntu)
 * BLAS Library: OpenBLAS (libopenblas-dev) or (optionally) Intel MKL
 * zlib library (zlib1g & zlib1g-dev on Debian/Ubuntu)
 * Standard OpenCL C headers (opencl-headers on Debian/Ubuntu, or at
@@ -89,7 +89,7 @@ the line that says "#define USE_OPENCL".
     # Clone github repo
     git clone https://github.com/gcp/leela-zero
     cd leela-zero/src
-    sudo apt install libboost-dev libboost-program-options-dev libopenblas-dev opencl-headers ocl-icd-libopencl1 ocl-icd-opencl-dev zlib1g-dev
+    sudo apt install libboost-dev libboost-program-options-dev libboost-filesystem-dev libopenblas-dev opencl-headers ocl-icd-libopencl1 ocl-icd-opencl-dev zlib1g-dev
     make
     cd ..
     wget http://zero.sjeng.org/best-network
@@ -142,9 +142,19 @@ The engine supports the [GTP protocol, version 2](https://www.lysator.liu.se/~gu
 Leela Zero is not meant to be used directly. You need a graphical interface
 for it, which will interface with Leela Zero through the GTP protocol.
 
+[Lizzie](https://github.com/featurecat/lizzie/releases) is a client specifically
+for Leela Zero which shows live search probilities, a win rate graph, and has
+an automatic game analysis mode. Has binaries for Windows, Mac, and Linux.
+
 [Sabaki](http://sabaki.yichuanshen.de/) is a very nice looking GUI with GTP 2
-capability. It should work with this engine. A lot of go software can
-interface to an engine via GTP, so look around.
+capability.
+
+[LeelaSabaki](https://github.com/SabakiHQ/LeelaSabaki) is modified to
+show variations and winning statistics in the game tree, as well as a heatmap
+on the game board.
+
+A lot of go software can interface to an engine via GTP,
+so look around.
 
 Add the --gtp commandline option on the engine command line to enable Leela
 Zero's GTP support. You will need a weights file, specify that with the -w option.
@@ -281,11 +291,14 @@ If interrupted, training can be resumed with:
 
 # Todo
 
-- [ ] List of package names for more distros
-- [ ] Multi-GPU support for training
-- [ ] Optimize Winograd transformations
-- [ ] CUDA specific version using cuDNN
-- [ ] AMD specific version using MIOpen
+- [ ] Optimize Winograd transformations.
+- [ ] Implement GPU batching.
+- [ ] Parameter setting over GTP.
+- More backends:
+- [ ] Eigen based BLAS backend.
+- [ ] MKL-DNN based backend.
+- [ ] CUDA specific version using cuDNN.
+- [ ] AMD specific version using MIOpen.
 
 # Related links
 

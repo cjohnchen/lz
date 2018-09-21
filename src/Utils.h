@@ -16,8 +16,8 @@
     along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef UTILS_H_DEFINED
-#define UTILS_H_DEFINED
+#ifndef UTILS_H_INCLUDED
+#define UTILS_H_INCLUDED
 
 #include "config.h"
 
@@ -32,6 +32,7 @@ extern Utils::ThreadPool thread_pool;
 namespace Utils {
     void myprintf(const char *fmt, ...);
     void gtp_printf(int id, const char *fmt, ...);
+    void gtp_printf_raw(const char *fmt, ...);
     void gtp_fail_printf(int id, const char *fmt, ...);
     void log_input(const std::string& input);
     bool input_pending();
@@ -52,6 +53,8 @@ namespace Utils {
     }
 
     size_t ceilMultiple(size_t a, size_t b);
+
+    const std::string leelaz_file(std::string file);
 }
 
 #endif
