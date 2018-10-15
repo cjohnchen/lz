@@ -161,11 +161,11 @@ int UCTNode::get_move() const {
 }
 
 void UCTNode::virtual_loss() {
-    m_virtual_loss += VIRTUAL_LOSS_COUNT;
+    atomic_add(m_virtual_loss, cfg_virtual_loss); //VIRTUAL_LOSS_COUNT;
 }
 
 void UCTNode::virtual_loss_undo() {
-    m_virtual_loss -= VIRTUAL_LOSS_COUNT;
+    atomic_add(m_virtual_loss, -cfg_virtual_loss); //VIRTUAL_LOSS_COUNT;
 }
 
 void UCTNode::update(float eval, float factor) {
@@ -267,7 +267,10 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
     auto fpu_eval = get_net_eval(color) - fpu_reduction;
 
     auto best = static_cast<UCTNodePointer*>(nullptr);
+    //auto actual_best = best;
     auto best_value = std::numeric_limits<double>::lowest();
+    auto best_actual_value = best_value;
+    auto actual_value_of_best = best_value;
 
     for (auto& child : m_children) {
         if (!child.active()) {
@@ -275,6 +278,7 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
         }
 
         auto winrate = fpu_eval;
+        auto actual_winrate = fpu_eval;
         if (child.is_inflated() && child->m_expand_state.load() == ExpandState::EXPANDING) {
             // Someone else is expanding this node, never select it
             // if we can avoid so, because we'd block on it.
@@ -282,21 +286,30 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
         } else if (child.get_visits() > 0) {
             winrate = child.get_eval(color);
         }
+        if (child.get_visits() > 0) {
+            actual_winrate = child.get_raw_eval(color);
+        }
         auto psa = child.get_policy();
         auto denom = 1.0 + child.get_visits();
         auto puct = cfg_puct * psa * (numerator / denom);
         auto value = winrate + puct;
+        auto actual_value = actual_winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
 
         if (value > best_value) {
             best_value = value;
+            actual_value_of_best = actual_value;
             best = &child;
+        }
+        if (actual_value > best_actual_value) {
+            best_actual_value = actual_value;
+            //actual_best = &child;
         }
     }
 
     assert(best != nullptr);
     best->inflate();
-    return std::make_pair(best->get(), 0.0f);
+    return std::make_pair(best->get(), best_actual_value - actual_value_of_best);
 }
 
 class NodeComp : public std::binary_function<UCTNodePointer&,
