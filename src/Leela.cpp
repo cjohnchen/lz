@@ -152,7 +152,7 @@ static void parse_commandline(int argc, char *argv[]) {
                       "-m0 -t1 -s1.")
         ("cpu-only", "Use CPU-only implementation and do not use GPU.")
         ("virtual-loss", po::value<float>())
-        ("base", po::value<float>())
+        ("logbase", po::value<float>())
         ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("GPU options");
@@ -353,8 +353,8 @@ static void parse_commandline(int argc, char *argv[]) {
         cfg_virtual_loss = vm["virtual-loss"].as<float>();
     }
 
-    if (vm.count("base")) {
-        cfg_base = vm["base"].as<float>();
+    if (vm.count("logbase")) {
+        cfg_logbase = vm["logbase"].as<float>();
     }
 
     if (vm.count("playouts")) {

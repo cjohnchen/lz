@@ -196,8 +196,6 @@ float UCTSearch::get_min_psa_ratio() const {
     return 0.0f;
 }
 
-float cfg_base = 2.0f;
-
 SearchResult UCTSearch::play_simulation(GameState & currstate,
                                         UCTNode* const node) {
     const auto color = currstate.get_to_move();
@@ -235,7 +233,7 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
     }
 
     if (result.valid()) {
-        node->update(result.eval(), pow(cfg_base, result.discrepancy));
+        node->update(result.eval(), exp(cfg_logbase * result.discrepancy));
     }
     node->virtual_loss_undo();
 

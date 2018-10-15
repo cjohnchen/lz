@@ -309,7 +309,7 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
 
     assert(best != nullptr);
     best->inflate();
-    return std::make_pair(best->get(), best_actual_value - actual_value_of_best);
+    return std::make_pair(best->get(), actual_value_of_best - best_actual_value);
 }
 
 class NodeComp : public std::binary_function<UCTNodePointer&,
