@@ -39,6 +39,7 @@ public:
     SearchResult() = default;
     bool valid() const { return m_valid;  }
     float eval() const { return m_eval;  }
+    float discrepancy{0.0f};
     static SearchResult from_eval(float eval) {
         return SearchResult(eval);
     }
@@ -53,7 +54,7 @@ public:
     }
 private:
     explicit SearchResult(float eval)
-        : m_valid(true), m_eval(eval) {}
+        : m_valid(true), m_eval(eval), discrepancy(0.0f) {}
     bool m_valid{false};
     float m_eval{0.0f};
 };

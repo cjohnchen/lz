@@ -114,7 +114,7 @@ bool UCTNodePointer::valid() const {
     return true;
 }
 
-int UCTNodePointer::get_visits() const {
+double UCTNodePointer::get_visits() const {
     auto v = m_data.load();
     if (is_inflated(v)) return read_ptr(v)->get_visits();
     return 0;
