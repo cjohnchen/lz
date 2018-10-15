@@ -82,6 +82,8 @@ bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_cpu_only;
+float cfg_virtual_loss;
+float cfg_base;
 int cfg_analyze_interval_centis;
 
 std::unique_ptr<Network> GTP::s_network;
@@ -148,6 +150,8 @@ void GTP::setup_default_parameters() {
 #else
     cfg_cpu_only = false;
 #endif
+    cfg_virtual_loss = 3.0f;
+    cfg_base = 1.0f;
 
     cfg_analyze_interval_centis = 0;
 

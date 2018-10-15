@@ -68,6 +68,8 @@ extern bool cfg_quiet;
 extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_cpu_only;
+extern float cfg_virtual_loss;
+extern float cfg_base;
 extern int cfg_analyze_interval_centis;
 
 static constexpr size_t MiB = 1024LL * 1024LL;
