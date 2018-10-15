@@ -196,6 +196,8 @@ float UCTSearch::get_min_psa_ratio() const {
     return 0.0f;
 }
 
+float cfg_base = 2.0f;
+
 SearchResult UCTSearch::play_simulation(GameState & currstate,
                                         UCTNode* const node) {
     const auto color = currstate.get_to_move();
@@ -221,18 +223,19 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
 
     if (node->has_children() && !result.valid()) {
         auto next = node->uct_select_child(color, node == m_root.get());
-        auto move = next->get_move();
+        auto move = next.first->get_move();
 
         currstate.play_move(move);
         if (move != FastBoard::PASS && currstate.superko()) {
-            next->invalidate();
+            next.first->invalidate();
         } else {
-            result = play_simulation(currstate, next);
+            result = play_simulation(currstate, next.first);
+            result.discrepancy += next.second;
         }
     }
 
     if (result.valid()) {
-        node->update(result.eval());
+        node->update(result.eval(), pow(cfg_base, result.discrepancy));
     }
     node->virtual_loss_undo();
 
@@ -581,7 +584,7 @@ int UCTSearch::est_playouts_left(int elapsed_centis, int time_for_move) const {
     auto playouts = m_playouts.load();
     const auto playouts_left =
         std::max(0, std::min(m_maxplayouts - playouts,
-                             m_maxvisits - m_root->get_visits()));
+                             m_maxvisits - (int)m_root->get_visits()));
 
     // Wait for at least 1 second and 100 playouts
     // so we get a reliable playout_rate.
@@ -601,7 +604,7 @@ size_t UCTSearch::prune_noncontenders(int elapsed_centis, int time_for_move, boo
     // taking the (root) node lock.
     for (const auto& node : m_root->get_children()) {
         if (node->valid()) {
-            Nfirst = std::max(Nfirst, node->get_visits());
+            Nfirst = std::max(Nfirst, (int)node->get_visits());
         }
     }
     const auto min_required_visits =

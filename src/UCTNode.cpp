@@ -168,9 +168,9 @@ void UCTNode::virtual_loss_undo() {
     m_virtual_loss -= VIRTUAL_LOSS_COUNT;
 }
 
-void UCTNode::update(float eval) {
-    m_visits++;
-    accumulate_eval(eval);
+void UCTNode::update(float eval, float factor) {
+    accumulate_visit(factor);
+    accumulate_eval(eval*factor);
 }
 
 bool UCTNode::has_children() const {
@@ -196,7 +196,7 @@ void UCTNode::set_policy(float policy) {
     m_policy = policy;
 }
 
-int UCTNode::get_visits() const {
+double UCTNode::get_visits() const {
     return m_visits;
 }
 
@@ -236,7 +236,11 @@ void UCTNode::accumulate_eval(float eval) {
     atomic_add(m_blackevals, double(eval));
 }
 
-UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
+void UCTNode::accumulate_visit(float factor) {
+    atomic_add(m_visits, double(factor));
+}
+
+std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
     wait_expanded();
 
     // Count parentvisits manually to avoid issues with transpositions.
@@ -292,7 +296,7 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
 
     assert(best != nullptr);
     best->inflate();
-    return best->get();
+    return std::make_pair(best->get(), 0.0f);
 }
 
 class NodeComp : public std::binary_function<UCTNodePointer&,
