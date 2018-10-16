@@ -78,6 +78,7 @@ bool UCTNode::create_children(Network & network,
     if (state.board.white_to_move()) {
         m_net_eval = 1.0f - m_net_eval;
     }
+    update(m_net_eval, 0.0f);
     eval = m_net_eval;
 
     std::vector<Network::PolicyVertexPair> nodelist;

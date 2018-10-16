@@ -207,6 +207,7 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
         if (currstate.get_passes() >= 2) {
             auto score = currstate.final_score();
             result = SearchResult::from_score(score);
+            node->update(result.eval(), 0.0f);
         } else if (UCTNodePointer::get_tree_size() < cfg_max_tree_size) {
             float eval;
             const auto had_children = node->has_children();
@@ -229,12 +230,12 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
         } else {
             result = play_simulation(currstate, next.first);
             result.discrepancy += next.second;
+            if (result.valid()) {
+                node->update(result.eval(), exp(cfg_logbase * result.discrepancy));
+            }
         }
     }
 
-    if (result.valid()) {
-        node->update(result.eval(), exp(cfg_logbase * result.discrepancy));
-    }
     node->virtual_loss_undo();
 
     return result;
