@@ -252,9 +252,6 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
             if (child.get_visits() > 0) {
                 total_visited_policy += child.get_policy();
             }
-            else {
-                break; // children are ordered by policy (initially) or by visits (NodeComp), so this is good.
-            }
         }
     }
 
