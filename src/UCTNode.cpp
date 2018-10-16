@@ -252,6 +252,9 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
             if (child.get_visits() > 0) {
                 total_visited_policy += child.get_policy();
             }
+            else {
+                break; // children are ordered by policy (initially) or by visits (NodeComp), so this is good.
+            }
         }
     }
 
@@ -264,13 +267,15 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
         fpu_reduction = cfg_fpu_reduction * std::sqrt(total_visited_policy);
     }
     // Estimated eval for unknown nodes = original parent NN eval - reduction
-    auto fpu_eval = get_net_eval(color) - fpu_reduction;
+    auto net_eval = get_net_eval(color);
+    auto fpu_eval = net_eval - fpu_reduction;
 
     auto best = static_cast<UCTNodePointer*>(nullptr);
     //auto actual_best = best;
     auto best_value = std::numeric_limits<double>::lowest();
     auto best_actual_value = best_value;
     auto actual_value_of_best = best_value;
+    total_visited_policy = 0.0f;
 
     for (auto& child : m_children) {
         if (!child.active()) {
@@ -298,13 +303,14 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
 
         if (value > best_value) {
             best_value = value;
-            actual_value_of_best = actual_value;
+            actual_value_of_best = child.get_visits() > 0 ? actual_value : net_eval - cfg_fpu_reduction * std::sqrt(total_visited_policy);
             best = &child;
         }
         if (actual_value > best_actual_value) {
             best_actual_value = actual_value;
             //actual_best = &child;
         }
+        total_visited_policy += psa;
     }
 
     assert(best != nullptr);
