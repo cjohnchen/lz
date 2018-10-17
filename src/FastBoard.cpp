@@ -257,20 +257,6 @@ int FastBoard::calc_reach_color(int color) const {
             }
         }
     }
-    while (!open.empty()) {
-        /* colored field, spread */
-        auto vertex = open.front();
-        open.pop();
-
-        for (auto k = 0; k < 4; k++) {
-            auto neighbor = vertex + m_dirs[k];
-            if (!bd[neighbor] && m_state[neighbor] == EMPTY) {
-                reachable++;
-                bd[neighbor] = true;
-                open.push(neighbor);
-            }
-        }
-    }
     return reachable;
 }
 
