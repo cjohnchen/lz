@@ -32,6 +32,8 @@
 #include "SMP.h"
 #include "UCTNodePointer.h"
 
+class UCTSearch;
+
 class UCTNode {
 public:
     // When we visit a node, add this amount of virtual losses
@@ -46,7 +48,8 @@ public:
     bool create_children(Network & network,
                          std::atomic<int>& nodecount,
                          GameState& state, float& eval,
-                         float min_psa_ratio = 0.0f);
+                         float min_psa_ratio = 0.0f,
+                         int symmetry = -1);
 
     const std::vector<UCTNodePointer>& get_children() const;
     void sort_children(int color);
@@ -71,12 +74,14 @@ public:
     void virtual_loss();
     void virtual_loss_undo();
     void update(float eval, float factor);
+    void set_net_eval(float eval) { m_net_eval = eval; }
+    void clear(Network & net, std::atomic<int>& nodes, GameState& root_state, float& eval);
 
     // Defined in UCTNodeRoot.cpp, only to be called on m_root in UCTSearch
     void randomize_first_proportionally();
     void prepare_root_node(Network & network, int color,
                            std::atomic<int>& nodecount,
-                           GameState& state);
+                           GameState& state, UCTSearch * search);
 
     UCTNode* get_first_child() const;
     UCTNode* get_nopass_child(FastState& state) const;
@@ -111,7 +116,7 @@ private:
     // UCT eval
     float m_policy;
     // Original net eval for this node (not children).
-    float m_net_eval{0.0f};
+    float m_net_eval{2.0f};
     std::atomic<double> m_blackevals{0.0};
     std::atomic<Status> m_status{ACTIVE};
 
