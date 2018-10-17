@@ -73,7 +73,7 @@ public:
     float get_net_eval(int tomove) const;
     void virtual_loss();
     void virtual_loss_undo();
-    void update(float eval, float factor);
+    void update(float eval, float factor = 0.0f);
     void set_net_eval(float eval) { m_net_eval = eval; }
     void clear(Network & net, std::atomic<int>& nodes, GameState& root_state, float& eval);
 

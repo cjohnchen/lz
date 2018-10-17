@@ -212,7 +212,7 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
         if (currstate.get_passes() >= 2) {
             auto score = currstate.final_score();
             result = SearchResult::from_score(score);
-            node->update(result.eval(), 0.0f);
+            node->update(result.eval());
             // myprintf("double-pass %d\n", thread_num); ////
         } else if (UCTNodePointer::get_tree_size() < cfg_max_tree_size) {
             float eval;

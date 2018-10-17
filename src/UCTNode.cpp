@@ -47,15 +47,12 @@ bool UCTNode::first_visit() const {
     return m_visits == 0;
 }
 
-SMP::Mutex& UCTNode::get_mutex() {
-    return m_nodemutex;
-}
-
 bool UCTNode::create_children(Network & network,
                               std::atomic<int>& nodecount,
                               GameState& state,
                               float& eval,
-                              float min_psa_ratio) {
+                              float min_psa_ratio,
+                              int symmetry) {
     // no successors in final state
     if (state.get_passes() >= 2) {
         return false;
@@ -86,7 +83,9 @@ bool UCTNode::create_children(Network & network,
     if (state.board.white_to_move()) {
         m_net_eval = 1.0f - m_net_eval;
     }
-    update(m_net_eval, 0.0f);
+    if (!state.eval_invalid()) {
+        update(m_net_eval);
+    }
     eval = m_net_eval;
 
     std::vector<Network::PolicyVertexPair> nodelist;
@@ -317,7 +316,7 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
 
         if (value > best_value) {
             best_value = value;
-            actual_value_of_best = child_visits > 0 ? actual_value : net_eval - cfg_fpu_reduction * std::sqrt(total_visited_policy);
+            actual_value_of_best = child_visits > 0 ? actual_value : parent_eval - cfg_fpu_reduction * std::sqrt(total_visited_policy);
             best = &child;
         }
         if (actual_value > best_actual_value) {
