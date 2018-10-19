@@ -78,7 +78,7 @@ bool UCTNode::create_children(Network & network,
     if (state.board.white_to_move()) {
         m_net_eval = 1.0f - m_net_eval;
     }
-    update(m_net_eval, 0.0f);
+    update(m_net_eval);
     eval = m_net_eval;
 
     std::vector<Network::PolicyVertexPair> nodelist;
@@ -268,7 +268,7 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
         fpu_reduction = cfg_fpu_reduction * std::sqrt(total_visited_policy);
     }
     // Estimated eval for unknown nodes = original parent NN eval - reduction
-    auto net_eval = get_net_eval(color);
+    auto net_eval = get_raw_eval(color);
     auto fpu_eval = net_eval - fpu_reduction;
 
     auto best = static_cast<UCTNodePointer*>(nullptr);
