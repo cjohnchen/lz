@@ -99,6 +99,7 @@ void UCTNode::dirichlet_noise(float epsilon, float alpha) {
         policy = policy * (1 - epsilon) + epsilon * eta_a;
         child->set_policy(policy);
     }
+    std::stable_sort(rbegin(m_children), rend(m_children), [](UCTNodePointer a, UCTNodePointer b) { return a->get_policy() < b->get_policy(); });
 }
 
 void UCTNode::randomize_first_proportionally() {
