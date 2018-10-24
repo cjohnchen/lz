@@ -142,6 +142,7 @@ void UCTNode::link_nodelist(std::atomic<int>& nodecount,
     for (const auto& node : nodelist) {
         if (node.first < new_min_psa) {
             skipped_children = true;
+            break;
         } else if (node.first < old_min_psa) {
             m_children.emplace_back(node.second, node.first);
             ++nodecount;
@@ -247,6 +248,8 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
             parentvisits += child.get_visits();
             if (child.get_visits() > 0) {
                 total_visited_policy += child.get_policy();
+            } else { // if (!cfg_noise || !is_root) {
+                break;
             }
         }
     }
