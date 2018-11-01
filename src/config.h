@@ -1,4 +1,4 @@
-/*
+/* 
     This file is part of Leela Zero.
     Copyright (C) 2017-2018 Gian-Carlo Pascutto and contributors
 
@@ -114,6 +114,7 @@ static constexpr auto MAX_CPUS = 64;
 static constexpr auto MAX_CPUS = 256;
 #endif
 
+#define USE_HALF
 #ifdef USE_HALF
 #include "half/half.hpp"
 #endif
