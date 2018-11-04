@@ -304,7 +304,8 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
 
         if (value > best_value) {
             best_value = value;
-            actual_value_of_best = child.get_visits() > 0 ? actual_value : net_eval - cfg_fpu_reduction * std::sqrt(total_visited_policy);
+            actual_value_of_best = child.get_visits() > 0 ? actual_value : 
+                net_eval - cfg_fpu_reduction * std::sqrt(total_visited_policy) + puct;
             best = &child;
         }
         if (actual_value > best_actual_value) {
