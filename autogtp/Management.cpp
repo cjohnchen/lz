@@ -257,7 +257,8 @@ QString Management::getOptionsString(const QJsonObject &opt, const QString &rnd)
     options.append(getOption(opt, "playouts", " -p ", ""));
     options.append(getOption(opt, "visits", " -v ", ""));
     options.append(getOption(opt, "resignation_percent", " -r ", "1"));
-    options.append(getOption(opt, "randomcnt", " -m ", "30"));
+    options.append(" -m 30 ");
+    //options.append(getOption(opt, "randomcnt", " -m ", "30"));
     options.append(getOption(opt, "threads", " -t ", "1"));
     options.append(getBoolOption(opt, "dumbpass", " -d ", true));
     options.append(getBoolOption(opt, "noise", " -n ", true));
