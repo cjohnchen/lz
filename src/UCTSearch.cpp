@@ -40,6 +40,7 @@
 using namespace Utils;
 
 constexpr int UCTSearch::UNLIMITED_PLAYOUTS;
+
 class OutputAnalysisData {
 public:
     OutputAnalysisData(const std::string& move, int visits,
@@ -189,6 +190,10 @@ float UCTSearch::get_min_psa_ratio() const {
     if (mem_full > 0.5f) {
         // Memory is almost exhausted, trim more aggressively.
         if (mem_full > 0.95f) {
+            // if completely full just stop expansion by returning an impossible number
+            if (mem_full >= 1.0f) {
+                return 2.0f;
+            }
             return 0.01f;
         }
         return 0.001f;
@@ -207,7 +212,7 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
         if (currstate.get_passes() >= 2) {
             auto score = currstate.final_score();
             result = SearchResult::from_score(score);
-        } else if (UCTNodePointer::get_tree_size() < cfg_max_tree_size) {
+        } else {
             float eval;
             const auto had_children = node->has_children();
             const auto success =
@@ -738,7 +743,7 @@ int UCTSearch::think(int color, passflag_t passflag) {
         // check if we should still search
         if (elapsed_centis - last_update > 250) {
             last_update = elapsed_centis;
-            dump_analysis(static_cast<int>(m_playouts));
+            dump_analysis(m_playouts.load());
         }
         keeprunning  = is_running();
         keeprunning &= !stop_thinking(elapsed_centis, time_for_move);
