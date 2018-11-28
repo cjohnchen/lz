@@ -847,6 +847,7 @@ int UCTSearch::think(int color, passflag_t passflag) {
         keeprunning &= have_alternate_moves(elapsed_centis, time_for_move);
     } while (keeprunning);
 
+    myprintf("Waiting for simulations to stop.\n");
     // stop the search
     m_run = false;
     std::unique_lock<std::mutex> lk0(m_network.get_queue_mutex());
@@ -854,8 +855,10 @@ int UCTSearch::think(int color, passflag_t passflag) {
     lk0.unlock();
     // below can move to update_root()
     tg.wait_all();
+    myprintf("Simulations stopped.\n");
     std::unique_lock<std::mutex> lk(m_mutex);
     backup_queue = {};
+    myprintf("Queue cleared.\n");
 
     // reactivate all pruned root children
     for (const auto& node : m_root->get_children()) {
