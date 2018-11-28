@@ -97,6 +97,7 @@ public:
     std::atomic<int> m_positions{0};
     std::atomic<bool> m_run{false};
     std::condition_variable m_cv;
+    std::vector<int> m_thread_playouts;
 
 private:
     float get_min_psa_ratio() const;

@@ -37,6 +37,7 @@
 #include <functional>
 
 namespace Utils {
+    void myprintf(const char *fmt, ...);
 
 class ThreadPool {
 public:
@@ -127,6 +128,21 @@ public:
     void wait_all() {
         for (auto && result : m_taskresults) {
             result.get();
+        }
+    }
+    void wait_all0() {
+        bool done = false;
+        while (!done) {
+            done = true;
+            myprintf("Waiting for threads: ");
+            auto i = 1;
+            for (auto && result : m_taskresults) {
+                if (result.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+                    done = false;
+                    myprintf("%d, ", i);
+                    i++;
+                }
+            }
         }
     }
 private:

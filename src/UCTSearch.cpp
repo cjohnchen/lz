@@ -769,6 +769,7 @@ bool UCTSearch::stop_thinking(int elapsed_centis, int time_for_move) const {
 void UCTWorker::operator()() {
     do {
         m_search->play_simulation(std::make_unique<GameState>(m_rootstate), m_root, m_thread_num);
+        m_search->m_thread_playouts[m_thread_num - 1]++;
     } while (m_search->is_running());
 }
 
@@ -814,6 +815,8 @@ int UCTSearch::think(int color, passflag_t passflag) {
 
     int cpus = cfg_num_threads;
     ThreadGroup tg(thread_pool);
+    //debug
+    m_thread_playouts.assign(cpus, 0);
     for (int i = 1; i <= cpus; i++) {
         tg.add_task(UCTWorker(m_rootstate, this, m_root.get(), i));
     }
@@ -847,15 +850,17 @@ int UCTSearch::think(int color, passflag_t passflag) {
         keeprunning &= have_alternate_moves(elapsed_centis, time_for_move);
     } while (keeprunning);
 
-    myprintf("Waiting for simulations to stop.\n");
+    //debug
+    for (auto i = 0; i < cpus; i++) { myprintf("%3d, %d\n", i+1, m_thread_playouts[i]); }
+    myprintf("\nWaiting for simulations to stop.\n");
     // stop the search
     m_run = false;
     std::unique_lock<std::mutex> lk0(m_network.get_queue_mutex());
     m_network.notify();
     lk0.unlock();
     // below can move to update_root()
-    tg.wait_all();
-    myprintf("Simulations stopped.\n");
+    tg.wait_all0();
+    myprintf("\nSimulations stopped.\n");
     std::unique_lock<std::mutex> lk(m_mutex);
     backup_queue = {};
     myprintf("Queue cleared.\n");

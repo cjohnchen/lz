@@ -242,12 +242,15 @@ double binary_search_visits(std::function<double(double)> f, double v_init) {
     auto low = 0.0;
     auto high = v_init;
     while (f(high) < 0.0) { low = high; high = 2.0 * high; }
+    auto count = 0;
     while (true) {
         auto mid = (low + high) / 2.0;
         auto fmid = f(mid);
         if (abs(fmid) < 0.000001) { return mid; }
         if (fmid < 0.0) { low = mid; }
         else { high = mid; }
+        count++;
+        if (count % 100 == 0) { myprintf("Stuck: %d times in loop!\n", count); }
     }
 }
 
