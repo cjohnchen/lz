@@ -297,7 +297,7 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
         }
     }
     auto numerator = std::sqrt(parentvisits);
-    auto parent_eval = get_visits(WR) > 0.0 ? get_raw_eval(color) : get_net_eval(color);
+    auto parent_eval = get_visits(WR) > 0.0 ? get_raw_eval(color) : get_net_eval(color); // should always be former case
 
     auto best = static_cast<UCTNodePointer*>(nullptr);
     auto actual_best = best;
