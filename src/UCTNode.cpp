@@ -249,8 +249,7 @@ double binary_search_visits(std::function<double(double)> f, double v_init, int 
         if (fmid < 0.0) { low = mid; }
         else { high = mid; }
         count++;
-        if (count % 40 == 0) { myprintf("Stuck: %d times in loop!\n", count); }
-        if (count > 120) { return mid; }
+        if (count % 10000 == 0) { myprintf("Stuck: %d times in loop!\n", count); }
     }
 }
 
