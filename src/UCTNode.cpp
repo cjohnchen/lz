@@ -238,11 +238,10 @@ float uct_value(float q, float p, double v, double v_total) {
     return q + cfg_puct * p * sqrt(v_total) / (1.0 + v);
 }
 
-double binary_search_visits(std::function<double(double)> f, double v_init) {
+double binary_search_visits(std::function<double(double)> f, double v_init, int &count) {
     auto low = 0.0;
     auto high = v_init;
     while (f(high) < 0.0) { low = high; high = 2.0 * high; }
-    auto count = 0;
     while (true) {
         auto mid = (low + high) / 2.0;
         auto fmid = f(mid);
@@ -250,18 +249,20 @@ double binary_search_visits(std::function<double(double)> f, double v_init) {
         if (fmid < 0.0) { low = mid; }
         else { high = mid; }
         count++;
-        if (count % 100 == 0) { myprintf("Stuck: %d times in loop!\n", count); }
+        if (count % 40 == 0) { myprintf("Stuck: %d times in loop!\n", count); }
+        if (count > 120) { return mid; }
     }
 }
 
 float factor(float q_c, float p_c, double v_c, float q_a, float p_a, double v_a, double v_total) {
+    int count = 0;
     auto v_additional = binary_search_visits(
-        [q_c, p_c, v_c, q_a, p_a, v_a, v_total](double x) {
+        [q_c, p_c, v_c, q_a, p_a, v_a, v_total, &count](double x) {
         return uct_value(q_c, p_c, v_c, v_total + x) - uct_value(q_a, p_a, v_a + x, v_total + x); },
-        1.0 + v_total);
+        1.0 + v_total, count);
 
     auto factor_ = v_total / (v_total + v_additional);
-    if (factor_ < 0.0) {
+    if (factor_ < 0.0 || count >= 40) {
         myprintf("chosen: %f, actual best: %f policy\n", p_c, p_a);
         myprintf("chosen: %f, actual best: %f visits\n", v_c, v_a);
         myprintf("chosen: %f, actual best: %f Q\n", q_c, q_a);
