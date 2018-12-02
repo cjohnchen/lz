@@ -221,27 +221,27 @@ void UCTSearch::backup() {
     if (!m_run) { return; }
     std::unique_lock<std::mutex> lk(m_mutex);
     while (!backup_queue.empty() &&
-           (!backup_queue.front()->netresult || backup_queue.front()->netresult->ready.load())) {
+           (!backup_queue.front().netresult || backup_queue.front().netresult->ready.load())) {
         auto bd = std::move(backup_queue.front());
         backup_queue.pop_front();
         lk.unlock();
-        if (bd->netresult) {
-            auto node = bd->path.back().node;
+        if (bd.netresult) {
+            auto node = bd.path.back().node;
             auto had_children = node->has_children();
-            auto min_psa_ratio = bd->path.size() == 1 ? 0.0 : get_min_psa_ratio();
-            node->create_children(bd->netresult->result, bd->symmetry, m_nodes, *bd->state, min_psa_ratio);
+            auto min_psa_ratio = bd.path.size() == 1 ? 0.0 : get_min_psa_ratio();
+            node->create_children(bd.netresult->result, bd.symmetry, m_nodes, *bd.state, min_psa_ratio);
             if (!had_children) {
-                auto eval = bd->netresult->result.winrate;
-                bd->eval = (bd->state->get_to_move() == FastBoard::BLACK ? eval : 1.0f - eval);
-                backup(*bd);
+                auto eval = bd.netresult->result.winrate;
+                bd.eval = (bd.state->get_to_move() == FastBoard::BLACK ? eval : 1.0f - eval);
+                backup(bd);
             }
             else {
-                failed_simulation(*bd);
-                bd->path.back().node->expand_done();
+                failed_simulation(bd);
+                bd.path.back().node->expand_done();
             }
         }
         else {
-            failed_simulation(*bd);
+            failed_simulation(bd);
         }
         if (m_run) { lk.lock(); }
         else { return; }
@@ -267,17 +267,17 @@ void UCTSearch::play_simulation(std::unique_ptr<GameState> currstate,
                                         UCTNode* node,
                                         int thread_num) {
     auto factor = 1.0f;
-    auto bd = std::make_unique<BackupData>();
+    BackupData bd;
     auto is_root = true;
     while (true) {
         node->virtual_loss();
-        bd->path.emplace_back(node, factor);
+        bd.path.emplace_back(node, factor);
         const auto color = currstate->get_to_move();
 
         // end of game
         if (currstate->get_passes() >= 2) {
-            bd->eval = eval_from_score(currstate->final_score());
-            backup(*bd);
+            bd.eval = eval_from_score(currstate->final_score());
+            backup(bd);
             return;
         }
 
@@ -292,18 +292,18 @@ void UCTSearch::play_simulation(std::unique_ptr<GameState> currstate,
                 node->create_children(result_sym.first->result, result_sym.second, m_nodes, *currstate, min_psa_ratio);
                 if (!had_children) {
                     auto eval = result_sym.first->result.winrate;
-                    bd->eval = (color == FastBoard::BLACK ? eval : 1.0f - eval);
-                    backup(*bd);
+                    bd.eval = (color == FastBoard::BLACK ? eval : 1.0f - eval);
+                    backup(bd);
                 }
                 else {
-                    failed_simulation(*bd);
+                    failed_simulation(bd);
                     node->expand_done();
                 }
             }
             else {
-                bd->state = std::move(currstate);
-                bd->netresult = result_sym.first;
-                bd->symmetry = result_sym.second;
+                bd.state = std::move(currstate);
+                bd.netresult = result_sym.first;
+                bd.symmetry = result_sym.second;
                 std::unique_lock<std::mutex> lk(m_mutex);
                 backup_queue.push_back(std::move(bd));
                 max_pending_backups = std::max(max_pending_backups, backup_queue.size());
@@ -315,7 +315,7 @@ void UCTSearch::play_simulation(std::unique_ptr<GameState> currstate,
         auto child_factor = node->uct_select_child(color, node == m_root.get());
         auto new_node = child_factor.first;
         if (new_node == nullptr) { // failed to select child
-            failed_simulation(*bd);
+            failed_simulation(bd);
             return;
         } else if (new_node == node) { // node is expanding
             m_failed_simulations++;
@@ -337,8 +337,8 @@ void UCTSearch::play_simulation(std::unique_ptr<GameState> currstate,
             */
             for (auto iter = backup_queue.rbegin(); iter != backup_queue.rend(); iter++) {
                 auto &bd = *iter;
-                if (bd->path.back().node == node) {
-                    bd->multiplicity++;
+                if (bd.path.back().node == node) {
+                    bd.multiplicity++;
                     return;
                 }
             }
@@ -353,7 +353,7 @@ void UCTSearch::play_simulation(std::unique_ptr<GameState> currstate,
         if (move != FastBoard::PASS && currstate->superko()) {
             //node->expand_done();
             node->invalidate();
-            failed_simulation(*bd);
+            failed_simulation(bd);
             return;
         }
         is_root = false;

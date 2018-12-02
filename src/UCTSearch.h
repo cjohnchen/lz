@@ -128,7 +128,7 @@ private:
     Network & m_network;
 
     std::mutex m_mutex;
-    std::deque<std::unique_ptr<BackupData>> backup_queue;
+    std::deque<BackupData> backup_queue;
     size_t max_pending_backups;
     void backup(BackupData& bd);
     void failed_simulation(BackupData& bd);
