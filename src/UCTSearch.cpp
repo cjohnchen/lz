@@ -269,7 +269,7 @@ void UCTSearch::play_simulation(std::unique_ptr<GameState> currstate,
     auto factor = 1.0f;
     auto bd = std::make_unique<BackupData>();
     auto is_root = true;
-    while(true) {
+    while (true) {
         node->virtual_loss();
         bd->path.emplace_back(node, factor);
         const auto color = currstate->get_to_move();
@@ -312,29 +312,25 @@ void UCTSearch::play_simulation(std::unique_ptr<GameState> currstate,
         }
 
         // select a child
-        if (node->has_children()) {
-            auto child_factor = node->uct_select_child(color, node == m_root.get());
-            node = child_factor.first;
-            if (node == nullptr) {
-                m_failed_simulations++;
-                std::unique_lock<std::mutex> lk(m_mutex);
-                if (!backup_queue.empty() && node == backup_queue.back()->path.back().node) {
-                    backup_queue.back()->multiplicity++;
-                }
-                else { backup_queue.push(std::move(bd)); }
-                return; 
+        auto child_factor = node->uct_select_child(color, node == m_root.get());
+        node = child_factor.first;
+        if (node == nullptr) {
+            m_failed_simulations++;
+            //failed_simulation(*bd);//
+            //return;//
+            std::unique_lock<std::mutex> lk(m_mutex);
+            if (!backup_queue.empty() && node == backup_queue.back()->path.back().node) {
+                backup_queue.back()->multiplicity++;
             }
-            factor = child_factor.second;
-            auto move = node->get_move();
-            currstate->play_move(move);
-            if (move != FastBoard::PASS && currstate->superko()) {
-                //node->expand_done();
-                node->invalidate();
-                failed_simulation(*bd);
-                return;
-            }
+            else { backup_queue.push(std::move(bd)); }
+            return;
         }
-        else {
+        factor = child_factor.second;
+        auto move = node->get_move();
+        currstate->play_move(move);
+        if (move != FastBoard::PASS && currstate->superko()) {
+            //node->expand_done();
+            node->invalidate();
             failed_simulation(*bd);
             return;
         }
