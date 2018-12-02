@@ -716,7 +716,7 @@ std::pair<Netresult_ptr, int> Network::probe_cache0(const GameState* const state
 
     for (auto sym = 0; sym < Network::NUM_SYMMETRIES; ++sym) {
         if (sym == Network::IDENTITY_SYMMETRY) {
-            continue;
+            //continue;
         }
         const auto hash = state->get_symmetry_hash(sym);
         auto result = m_nncache.lookup_and_insert(hash, false);
