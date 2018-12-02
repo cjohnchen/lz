@@ -276,7 +276,7 @@ float factor(float q_c, float p_c, double v_c, float q_a, float p_a, double v_a,
 }
 
 std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
-    if (m_expand_state != ExpandState::EXPANDED) { return std::make_pair(nullptr, 1.0f); }
+    if (m_expand_state != ExpandState::EXPANDED) { return std::make_pair(this, 1.0f); }
 
     // Count parentvisits manually to avoid issues with transpositions.
     auto total_visited_policy = 0.0f;

@@ -223,7 +223,7 @@ void UCTSearch::backup() {
     while (!backup_queue.empty() &&
            (!backup_queue.front()->netresult || backup_queue.front()->netresult->ready.load())) {
         auto bd = std::move(backup_queue.front());
-        backup_queue.pop();
+        backup_queue.pop_front();
         lk.unlock();
         if (bd->netresult) {
             auto node = bd->path.back().node;
@@ -305,7 +305,7 @@ void UCTSearch::play_simulation(std::unique_ptr<GameState> currstate,
                 bd->netresult = result_sym.first;
                 bd->symmetry = result_sym.second;
                 std::unique_lock<std::mutex> lk(m_mutex);
-                backup_queue.push(std::move(bd));
+                backup_queue.push_back(std::move(bd));
                 max_pending_backups = std::max(max_pending_backups, backup_queue.size());
             }
             return;
@@ -313,18 +313,40 @@ void UCTSearch::play_simulation(std::unique_ptr<GameState> currstate,
 
         // select a child
         auto child_factor = node->uct_select_child(color, node == m_root.get());
-        node = child_factor.first;
-        if (node == nullptr) {
+        auto new_node = child_factor.first;
+        if (new_node == nullptr) { // failed to select child
+            failed_simulation(*bd);
+            return;
+        } else if (new_node == node) { // node is expanding
             m_failed_simulations++;
             //failed_simulation(*bd);//
             //return;//
             std::unique_lock<std::mutex> lk(m_mutex);
+            /*
             if (!backup_queue.empty() && node == backup_queue.back()->path.back().node) {
                 backup_queue.back()->multiplicity++;
             }
-            else { backup_queue.push(std::move(bd)); }
+            else { backup_queue.push_back(std::move(bd)); }
+            
+            for (auto& bd : backup_queue) {
+                if (bd->path.back().node == node) {
+                    bd->multiplicity++;
+                    return;
+                }
+            }
+            */
+            for (auto iter = backup_queue.rbegin(); iter != backup_queue.rend(); iter++) {
+                auto &bd = *iter;
+                if (bd->path.back().node == node) {
+                    bd->multiplicity++;
+                    return;
+                }
+            }
+            backup_queue.push_back(std::move(bd));
+            max_pending_backups = std::max(max_pending_backups, backup_queue.size());
             return;
         }
+        node = new_node;
         factor = child_factor.second;
         auto move = node->get_move();
         currstate->play_move(move);
@@ -853,7 +875,7 @@ int UCTSearch::think(int color, passflag_t passflag) {
     // below can move to update_root()
     tg.wait_all();
     std::unique_lock<std::mutex> lk(m_mutex);
-    backup_queue = {};
+    backup_queue.clear();
 
     // reactivate all pruned root children
     for (const auto& node : m_root->get_children()) {
@@ -937,7 +959,7 @@ void UCTSearch::ponder() {
     lk0.unlock();
     tg.wait_all();
     std::unique_lock<std::mutex> lk(m_mutex);
-    backup_queue = {};
+    backup_queue.clear();
 
     // display search info
     myprintf("\n");
