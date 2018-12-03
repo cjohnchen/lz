@@ -98,6 +98,9 @@ public:
     std::atomic<bool> m_run{false};
     std::condition_variable m_cv;
 
+    std::mutex m_return_mutex;
+    std::deque<UCTNode*> return_queue;
+
 private:
     float get_min_psa_ratio() const;
     void dump_stats(FastState& state, UCTNode& parent);

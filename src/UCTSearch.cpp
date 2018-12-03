@@ -282,11 +282,12 @@ void UCTSearch::play_simulation(std::unique_ptr<GameState> currstate,
         }
 
         // expand a node
+        bool ready;
         if (node->expandable() && node->acquire_expanding()) {
             const auto result_sym = m_network.get_output0(
-                &*currstate, Network::Ensemble::RANDOM_SYMMETRY);
+                node, ready, &*currstate, Network::Ensemble::RANDOM_SYMMETRY);
             //if (!result_sym.first) { failed_simulation(*bd); myprintf("strange fail!\n"); return; }
-            if (result_sym.first->ready.load()) {
+            if (result_sym.first->ready) { //ready) { // all these refactor into backup(&bd)
                 const auto min_psa_ratio = is_root ? 0.0 : get_min_psa_ratio();
                 auto had_children = node->has_children();
                 node->create_children(result_sym.first->result, result_sym.second, m_nodes, *currstate, min_psa_ratio);

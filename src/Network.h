@@ -68,7 +68,9 @@ public:
         const int symmetry = -1,
         const bool skip_cache = false,
         const bool force_selfcheck = false);
-    std::pair<Netresult_ptr, int> get_output0(const GameState* const state,
+    std::pair<Netresult_ptr, int> get_output0(
+                         UCTNode* node, bool& ready,
+                         const GameState* const state,
                          const Ensemble ensemble,
                          const int symmetry = -1,
                          const bool skip_cache = false);
@@ -99,7 +101,7 @@ public:
     void nncache_dump_stats() { m_nncache.dump_stats(); }
     void nncache_clear();
 
-    void set_search(UCTSearch* search) { m_forward->m_search = search; m_forward->m_network = this; }
+    void set_search(UCTSearch* search) { m_search = search;  m_forward->m_search = search; m_forward->m_network = this; }
     std::mutex& get_queue_mutex() { return m_forward->m_mutex; }
     void notify() { m_forward->m_cv0.notify_all(); }
     void process_output(std::vector<float>& policy_data,
@@ -111,6 +113,8 @@ public:
     // Symmetry helper
     static std::array<std::array<int, NUM_INTERSECTIONS>,
         Network::NUM_SYMMETRIES> symmetry_nn_idx_table;
+
+    UCTSearch * m_search;
 
 private:
     std::pair<int, int> load_v1_network(std::istream& wtfile);

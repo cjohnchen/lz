@@ -284,7 +284,7 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
     auto actual_parentvisits = 0.0;
     for (const auto& child : m_children) {
         if (child.valid()) {
-            actual_parentvisits += child.get_visits();
+            actual_parentvisits += child.get_visits(); //
             parentvisits += child.get_visits(VL);
             if (child.get_visits(WR) > 0.0) {
                 total_visited_policy += child.get_policy();
