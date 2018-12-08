@@ -1,4 +1,4 @@
-/*
+/* 
     This file is part of Leela Zero.
     Copyright (C) 2017-2018 Gian-Carlo Pascutto and contributors
 
@@ -32,7 +32,6 @@
 extern bool cfg_gtp_mode;
 extern bool cfg_allow_pondering;
 extern int cfg_num_threads;
-extern int cfg_max_threads;
 extern int cfg_max_playouts;
 extern int cfg_max_visits;
 extern size_t cfg_max_memory;
@@ -41,6 +40,32 @@ extern int cfg_max_cache_ratio_percent;
 extern TimeManagement::enabled_t cfg_timemanage;
 extern int cfg_lagbuffer_cs;
 extern int cfg_resignpct;
+
+extern bool cfg_dyn_komi;
+extern float cfg_max_wr;
+extern float cfg_min_wr;
+extern float cfg_wr_margin;
+extern float cfg_target_komi;
+extern int cfg_adj_positions;
+extern float cfg_adj_pct;
+extern bool cfg_pos;
+extern bool cfg_neg;
+extern bool cfg_nonslack;
+extern bool cfg_sure_backup;
+extern bool cfg_noshift;
+extern bool cfg_use_symmetries;
+extern bool cfg_orig_policy;
+extern bool cfg_dyn_fpu;
+extern bool cfg_backup_fpu;
+extern bool cfg_collect_during_search;
+extern bool cfg_always_collect;
+extern int cfg_max_num_adjustments;
+extern int cfg_fixed_symmetry;
+extern bool cfg_use_root_for_diff;
+extern bool cfg_auto_pos_neg;
+extern float cfg_max_komi;
+extern float cfg_min_komi;
+
 extern int cfg_noise;
 extern int cfg_random_cnt;
 extern int cfg_random_min_visits;
@@ -51,6 +76,7 @@ extern bool cfg_dumbpass;
 extern std::vector<int> cfg_gpus;
 extern bool cfg_sgemm_exhaustive;
 extern bool cfg_tune_only;
+extern int cfg_batch_size;
 #ifdef USE_HALF
 enum class precision_t {
     AUTO, SINGLE, HALF
@@ -69,6 +95,8 @@ extern bool cfg_quiet;
 extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_cpu_only;
+extern float cfg_virtual_loss;
+extern float cfg_logbase;
 extern int cfg_analyze_interval_centis;
 
 static constexpr size_t MiB = 1024LL * 1024LL;

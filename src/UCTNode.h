@@ -32,12 +32,14 @@
 #include "SMP.h"
 #include "UCTNodePointer.h"
 
+class UCTSearch;
+
 class UCTNode {
 public:
     // When we visit a node, add this amount of virtual losses
     // to it to encourage other CPUs to explore other parts of the
     // search tree.
-    static constexpr auto VIRTUAL_LOSS_COUNT = 3;
+    //static constexpr auto VIRTUAL_LOSS_COUNT = 3;
     // Defined in UCTNode.cpp
     explicit UCTNode(int vertex, float policy);
     UCTNode() = delete;
@@ -46,12 +48,13 @@ public:
     bool create_children(Network & network,
                          std::atomic<int>& nodecount,
                          GameState& state, float& eval,
-                         float min_psa_ratio = 0.0f);
+                         float min_psa_ratio = 0.0f,
+                         int symmetry = -1);
 
     const std::vector<UCTNodePointer>& get_children() const;
     void sort_children(int color);
     UCTNode& get_best_root_child(int color);
-    UCTNode* uct_select_child(int color, bool is_root);
+    std::pair<UCTNode*, float> uct_select_child(int color, bool is_root);
 
     size_t count_nodes_and_clear_expand_state();
     bool first_visit() const;
@@ -62,7 +65,7 @@ public:
     bool valid() const;
     bool active() const;
     int get_move() const;
-    int get_visits() const;
+    double get_visits() const;
     float get_policy() const;
     void set_policy(float policy);
     float get_eval(int tomove) const;
@@ -70,13 +73,15 @@ public:
     float get_net_eval(int tomove) const;
     void virtual_loss();
     void virtual_loss_undo();
-    void update(float eval);
+    void update(float eval, float factor = 1.0f);
+    void set_net_eval(float eval) { m_net_eval = eval; }
+    void clear(Network & net, std::atomic<int>& nodes, GameState& root_state, float& eval);
 
     // Defined in UCTNodeRoot.cpp, only to be called on m_root in UCTSearch
     void randomize_first_proportionally();
     void prepare_root_node(Network & network, int color,
                            std::atomic<int>& nodecount,
-                           GameState& state);
+                           GameState& state, UCTSearch * search);
 
     UCTNode* get_first_child() const;
     UCTNode* get_nopass_child(FastState& state) const;
@@ -95,6 +100,7 @@ private:
                        float min_psa_ratio);
     double get_blackevals() const;
     void accumulate_eval(float eval);
+    void accumulate_visit(float factor);
     void kill_superkos(const KoState& state);
     void dirichlet_noise(float epsilon, float alpha);
 
@@ -105,12 +111,12 @@ private:
     // Move
     std::int16_t m_move;
     // UCT
-    std::atomic<std::int16_t> m_virtual_loss{0};
-    std::atomic<int> m_visits{0};
+    std::atomic<float> m_virtual_loss{0.0};
+    std::atomic<double> m_visits{0.0};
     // UCT eval
     float m_policy;
     // Original net eval for this node (not children).
-    float m_net_eval{0.0f};
+    float m_net_eval{2.0f};
     std::atomic<double> m_blackevals{0.0};
     std::atomic<Status> m_status{ACTIVE};
 

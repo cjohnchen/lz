@@ -116,12 +116,13 @@ public:
     // proxy of UCTNode methods which can be called without
     // constructing UCTNode
     bool valid() const;
-    int get_visits() const;
+    double get_visits() const;
     float get_policy() const;
     bool active() const;
     int get_move() const;
     // this can only be called if it is an inflated pointer
     float get_eval(int tomove) const;
+    float get_raw_eval(int tomove) const;
 };
 
 #endif
