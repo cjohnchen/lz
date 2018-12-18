@@ -33,6 +33,8 @@ public:
         std::vector<std::vector<float>> m_conv_biases;
         std::vector<std::vector<float>> m_batchnorm_means;
         std::vector<std::vector<float>> m_batchnorm_stddevs;
+        std::vector<std::vector<float>> m_batchnorm_gammas;
+        std::vector<std::vector<float>> m_batchnorm_betas;
 
         // Policy head
         std::vector<float> m_conv_pol_w;
@@ -49,6 +51,7 @@ public:
     virtual void forward(const std::vector<float>& input,
                          std::vector<float>& output_pol,
                          std::vector<float>& output_val) = 0;
+
     virtual void push_weights(unsigned int filter_size,
                               unsigned int channels,
                               unsigned int outputs,

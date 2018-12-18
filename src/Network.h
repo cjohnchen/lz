@@ -70,7 +70,7 @@ public:
                          const bool force_selfcheck = false);
 
     static constexpr auto INPUT_MOVES = 8;
-    static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 2;
+    static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 1;
     static constexpr auto OUTPUTS_POLICY = 2;
     static constexpr auto OUTPUTS_VALUE = 1;
     static constexpr auto VALUE_LAYER = 256;
@@ -82,7 +82,7 @@ public:
                    const int iterations = 1600);
     static void show_heatmap(const FastState * const state,
                              const Netresult & netres, const bool topmoves);
-
+	
     static std::vector<float> gather_features(const GameState* const state,
                                               const int symmetry);
     static std::pair<int, int> get_symmetry(const std::pair<int, int>& vertex,
@@ -96,7 +96,7 @@ public:
 private:
     std::pair<int, int> load_v1_network(std::istream& wtfile);
     std::pair<int, int> load_network_file(const std::string& filename);
-
+	
     static std::vector<float> winograd_transform_f(const std::vector<float>& f,
                                                    const int outputs, const int channels);
     static std::vector<float> zeropad_U(const std::vector<float>& U,
@@ -131,8 +131,8 @@ private:
 #endif
     std::unique_ptr<ForwardPipe> m_forward;
 #ifdef USE_OPENCL_SELFCHECK
-    void compare_net_outputs(const Netresult& data, const Netresult& ref);
     std::unique_ptr<ForwardPipe> m_forward_cpu;
+    void compare_net_outputs(const Netresult& data, const Netresult& ref);
 #endif
 
     NNCache m_nncache;
@@ -143,8 +143,11 @@ private:
     std::shared_ptr<ForwardPipeWeights> m_fwd_weights;
 
     // Policy head
+    std::vector<float> m_conv_pol_b;
     std::array<float, OUTPUTS_POLICY> m_bn_pol_w1;
     std::array<float, OUTPUTS_POLICY> m_bn_pol_w2;
+    std::array<float, OUTPUTS_POLICY> m_bn_pol_gamma;
+    std::array<float, OUTPUTS_POLICY> m_bn_pol_beta;
 
     std::array<float, OUTPUTS_POLICY
                       * NUM_INTERSECTIONS
@@ -152,8 +155,11 @@ private:
     std::array<float, POTENTIAL_MOVES> m_ip_pol_b;
 
     // Value head
+    std::vector<float> m_conv_val_b;
     std::array<float, OUTPUTS_VALUE> m_bn_val_w1;
     std::array<float, OUTPUTS_VALUE> m_bn_val_w2;
+    std::array<float, OUTPUTS_VALUE> m_bn_val_gamma;
+    std::array<float, OUTPUTS_VALUE> m_bn_val_beta;
 
     std::array<float, OUTPUTS_VALUE
                       * NUM_INTERSECTIONS
