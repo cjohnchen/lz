@@ -461,12 +461,10 @@ void OpenCL_Network<net_t>::convolve3(OpenCLContext & opencl_context,
             out_transform_bn_in_kernel.setArg(10, bn_weights[2]);
             out_transform_bn_in_kernel.setArg(11, bn_weights[3]);
             out_transform_bn_in_kernel.setArg(12, bn_weights[4]);
-            out_transform_bn_in_kernel.setArg(13,
-                cl::Local(dim_size * width * height * sizeof(float)));
             if (bufferOutNoBN) {
-                out_transform_bn_in_kernel.setArg(14, *bufferOutNoBN);
+                out_transform_bn_in_kernel.setArg(13, *bufferOutNoBN);
             } else {
-                out_transform_bn_in_kernel.setArg(14, nullptr);
+                out_transform_bn_in_kernel.setArg(13, nullptr);
             }
 
             queue.enqueueNDRangeKernel(out_transform_bn_in_kernel,

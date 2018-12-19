@@ -967,7 +967,8 @@ void Network::process_output(
     Netresult_ptr result) {
     // Get the moves
     batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY, policy_data,
-        m_bn_pol_w1.data(), m_bn_pol_w2.data());
+        m_bn_pol_w1.data(), m_bn_pol_w2.data(),
+        m_bn_pol_gamma.data(), m_bn_pol_beta.data());
     const auto policy_out =
         innerproduct<OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>(
             policy_data, m_ip_pol_w, m_ip_pol_b);
@@ -975,7 +976,8 @@ void Network::process_output(
 
     // Now get the value
     batchnorm<NUM_INTERSECTIONS>(OUTPUTS_VALUE, value_data,
-        m_bn_val_w1.data(), m_bn_val_w2.data());
+        m_bn_val_w1.data(), m_bn_val_w2.data(),
+        m_bn_val_gamma.data(), m_bn_val_beta.data());
     const auto winrate_data =
         innerproduct<OUTPUTS_VALUE * NUM_INTERSECTIONS, VALUE_LAYER, true>(
             value_data, m_ip1_val_w, m_ip1_val_b);

@@ -233,10 +233,6 @@ __kernel void out_transform_fused_bn(__global const net_t * restrict M,
 
     if (k < K && block < batch_size * P) {
         const real bias = vload_net_t(k, biases);
-        const real mean = vload_net_t(k, means);
-        const real scale_stddiv = vload_net_t(k, stddivs);
-        const real gamma = vload_net_t(k, gammas);
-        const real beta = vload_net_t(k, betas);
 
         real temp[WINOGRAD_M][WINOGRAD_ALPHA];
 
@@ -274,29 +270,6 @@ __kernel void out_transform_fused_bn(__global const net_t * restrict M,
         }
     }
 
-    for (int i = 0; i < WINOGRAD_M; i++){
-        for (int j = 0; j < WINOGRAD_M; j++) {
-#ifdef WINOGRAD_SIMD
-            real2 acc = {ZERO, ZERO};
-            real2 *x1 = (real2 *)&temp[i][0];
-            for (int q = 0; q < WINOGRAD_ALPHA/2; q++) {
-                real2 x2;
-                x2.x = At[j * WINOGRAD_ALPHA + 2*q];
-                x2.y = At[j * WINOGRAD_ALPHA + 2*q + 1];
-                acc += x1[q] * x2;
-            }
-            o[i * WINOGRAD_M + j] = acc.x + acc.y;
-#else
-            real acc = ZERO;
-            for (int q = 0; q < WINOGRAD_ALPHA; q++) {
-                acc += temp[i][q] * At[j * WINOGRAD_ALPHA + q];
-            }
-            o[i * WINOGRAD_M + j] = acc;
-#endif
-        }
-    }
-}
-
     barrier(CLK_LOCAL_MEM_FENCE);
 
     for (int idx = get_local_id(0) + get_local_size(0) * get_local_id(1); idx < OUT_BWG * OUT_KWG * WINOGRAD_M * WINOGRAD_M; idx += get_local_size(0) * get_local_size(1)) {
@@ -323,6 +296,11 @@ __kernel void out_transform_fused_bn(__global const net_t * restrict M,
         const int x = WINOGRAD_M * blockt_x;
         const int y = WINOGRAD_M * blockt_y;
         const int out_idx = batch * K * NUM_INTERSECTIONS + kt * NUM_INTERSECTIONS + (y + i) * W + (x + j);
+		
+        const real mean = vload_net_t(k, means);
+        const real scale_stddiv = vload_net_t(k, stddivs);
+        const real gamma = vload_net_t(k, gammas);
+        const real beta = vload_net_t(k, betas);
 
         if (kt < K && blockt < batch_size * P && y + i < H && x + j < W) {
             real acc = out_buf[k_local][block_local][i][j];
@@ -338,7 +316,9 @@ __kernel void out_transform_fused_bn(__global const net_t * restrict M,
         }
     }
 }
+)"
 
+R"(
 __kernel void out_transform_fused_bn_in(
                                      __global const net_t * restrict M,
                                      __global net_t * restrict Y,
@@ -351,7 +331,6 @@ __kernel void out_transform_fused_bn_in(
                                      __constant const net_t * restrict stddivs,
                                      __constant const net_t * restrict gammas,
                                      __constant const net_t * restrict betas,
-                                     __local real * ybuf,
                                      __global net_t * restrict Y2) {
 
     const int W = BOARD_SIZE;
@@ -376,10 +355,6 @@ __kernel void out_transform_fused_bn_in(
     if (k < K && block < P) {
 
         const real bias = vload_net_t(k, biases);
-        const real mean = vload_net_t(k, means);
-        const real scale_stddiv = vload_net_t(k, stddivs);
-        const real gamma = vload_net_t(k, gammas);
-        const real beta = vload_net_t(k, betas);
 
         real temp[WINOGRAD_M][WINOGRAD_ALPHA];
 
@@ -441,6 +416,11 @@ __kernel void out_transform_fused_bn_in(
         const int idx = x - kx * NUM_INTERSECTIONS;
 
         const int kHWx = batch * K * NUM_INTERSECTIONS + (k0 + kx) * NUM_INTERSECTIONS;
+				
+        const real mean = vload_net_t(k, means);
+        const real scale_stddiv = vload_net_t(k, stddivs);
+        const real gamma = vload_net_t(k, gammas);
+        const real beta = vload_net_t(k, betas);
 
         real acc = ybuf[kx * NUM_INTERSECTIONS + idx];
         if (residual) {
