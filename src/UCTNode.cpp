@@ -247,7 +247,7 @@ void UCTNode::accumulate_eval(float eval) {
     atomic_add(m_blackevals, double(eval));
 }
 
-UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
+UCTNode* UCTNode::uct_select_child(int color, bool is_root, int movenum) {
     wait_expanded();
 
     // Count parentvisits manually to avoid issues with transpositions.
@@ -271,10 +271,13 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
     auto best = static_cast<UCTNodePointer*>(nullptr);
     auto best_value = std::numeric_limits<double>::lowest();
 
+    auto count = 0;
     for (auto& child : m_children) {
         if (!child.active()) {
             continue;
         }
+        
+        if (count > 16 && movenum <= 50) break;
 
         auto winrate = fpu_eval;
         if (child.is_inflated() && child->m_expand_state.load() == ExpandState::EXPANDING) {
@@ -294,6 +297,7 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root) {
             best_value = value;
             best = &child;
         }
+        count++;
     }
 
     assert(best != nullptr);
