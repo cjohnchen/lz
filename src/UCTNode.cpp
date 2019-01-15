@@ -247,7 +247,7 @@ void UCTNode::accumulate_eval(float eval) {
     atomic_add(m_blackevals, double(eval));
 }
 
-UCTNode* UCTNode::uct_select_child(int color, bool is_root, int movenum) {
+UCTNode* UCTNode::uct_select_child(int color, bool is_root, int movenum, int result) {
     wait_expanded();
 
     // Count parentvisits manually to avoid issues with transpositions.
@@ -277,7 +277,21 @@ UCTNode* UCTNode::uct_select_child(int color, bool is_root, int movenum) {
             continue;
         }
         
-        if (count > 16 && movenum <= 50) break;
+        auto move = child->get_move();
+        if ((result == 0 && 
+            ((movenum == 0 && move == 360) ||
+             (movenum == 1 && move == 374) ||
+             (movenum == 2 && move == 66) ||
+             (movenum == 3 && move == 80)))
+            && (result == 1 &&
+                ((movenum == 0 && move == 374) // || ...
+                 ))
+            && (result == 2 // && ...
+                )
+            ) {
+            best = &child;
+            break;
+        }
 
         auto winrate = fpu_eval;
         if (child.is_inflated() && child->m_expand_state.load() == ExpandState::EXPANDING) {
