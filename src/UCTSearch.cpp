@@ -236,7 +236,7 @@ SearchResult UCTSearch::play_simulation(GameState & currstate,
     }
 
     if (node->has_children() && !result.valid()) {
-        auto next = node->uct_select_child(color, node == m_root.get(), m_rootstate.get_movenum());
+        auto next = node->uct_select_child(color, node == m_root.get(), currstate.get_movenum());
         auto move = next->get_move();
 
         currstate.play_move(move);
