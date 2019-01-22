@@ -190,7 +190,7 @@ class ChunkParser:
         planes = np.packbits(planes).tobytes()
 
         # Get the 'side to move'
-        stm = float(text_item[16][0])
+        stm = float(text_item[16])
         #if not(stm == "0" or stm == "1"):
         #    return False, None
         #stm = int(stm)
