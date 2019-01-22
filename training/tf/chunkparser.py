@@ -263,14 +263,14 @@ class ChunkParser:
         """
         (ver, probs, planes, to_move, winner) = self.v2_struct.unpack(content)
         # Unpack planes.
-        planes = np.unpackbits(np.frombuffer(planes, dtype=np.float32))
+        planes = np.unpackbits(np.frombuffer(planes, dtype=np.uint8)).astype('f')
         assert len(planes) == 19*19*16
         # Now we add the two final planes, being the 'color to move' planes.
         stm = to_move
         # assert stm == 0 or stm == 1
         # Flattern all planes to a single byte string
-        planes = planes.tobytes() + (np.array([1.0-stm]*361)).tobytes() + (np.array([stm]*361)).tobytes()
-        assert len(planes) == (18 * 19 * 19), len(planes)
+        planes = planes.tobytes() + (np.array([1.0-stm]*361 + [stm]*361)).astype('f').tobytes()
+        assert len(planes) == (18 * 19 * 19 * 4), len(planes)
 
         winner = float(winner * 2 - 1)
         assert winner == 1.0 or winner == -1.0, winner
