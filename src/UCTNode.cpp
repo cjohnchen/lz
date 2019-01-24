@@ -263,11 +263,11 @@ float factor(float q_c, float p_c, double v_c, float q_a, float p_a, double v_a,
         myprintf("chosen: %f, actual best: %f visits\n", v_c, v_a);
         myprintf("chosen: %f, actual best: %f Q\n", q_c, q_a);
         myprintf("chosen: %f, actual best: %f Q+U before addiaional visits\n",
-            uct_value(q_c, p_c, v_c, v_total),
-            uct_value(q_a, p_a, v_a, v_total));
+            uct_value(q_c, p_c, v_c, v_total, c_puct),
+            uct_value(q_a, p_a, v_a, v_total, c_puct));
         myprintf("chosen: %f, actual best: %f Q+U after %f additional visits\n",
-            uct_value(q_c, p_c, v_c, v_total + v_additional),
-            uct_value(q_a, p_a, v_a + v_additional, v_total + v_additional),
+            uct_value(q_c, p_c, v_c, v_total + v_additional, c_puct),
+            uct_value(q_a, p_a, v_a + v_additional, v_total + v_additional, c_puct),
             v_additional);
         myprintf("parentvisits: %f, factor: %f\n\n", v_total, factor_);
     }
@@ -308,7 +308,7 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
     auto visits_of_best = 0.0;
     auto visits_of_actual_best = 0.0;
     
-    auto c_puct = cfg_puct + cfg_puctscale * std::log((parentvisits + cfg_cbase)/cfg_cbase);
+    auto c_puct = cfg_puct + cfg_puctscale * std::log((1.0 + parentvisits)/cfg_cbase + 1.0);
 
     for (auto& child : m_children) {
         if (!child.active()) {
@@ -320,7 +320,10 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
         // Lower the expected eval for moves that are likely not the best.
         // Do not do this if we have introduced noise at this node exactly
         // to explore more.
-        winrate -= (is_root? cfg_fpu_root_reduction : cfg_fpu_reduction) * std::sqrt(total_visited_policy);
+        if (cfg_fpu_reduction < 999.9f)
+            winrate -= (is_root ? cfg_fpu_root_reduction : cfg_fpu_reduction) * std::sqrt(total_visited_policy);
+        else
+            winrate = 0.0f;
 
         auto actual_winrate = winrate;
         bool has_visits = false;
