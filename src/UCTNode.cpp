@@ -234,8 +234,8 @@ void UCTNode::accumulate_eval(float eval) {
     atomic_add(m_blackevals, double(eval));
 }
 
-float uct_value(float q, float p, double v, double v_total) {
-    return q + cfg_puct * p * sqrt(v_total) / (1.0 + v);
+float uct_value(float q, float p, double v, double v_total, double c_puct) {
+    return q + c_puct * p * sqrt(v_total) / (1.0 + v);
 }
 
 double binary_search_visits(std::function<double(double)> f, double v_init) {
@@ -251,10 +251,10 @@ double binary_search_visits(std::function<double(double)> f, double v_init) {
     }
 }
 
-float factor(float q_c, float p_c, double v_c, float q_a, float p_a, double v_a, double v_total) {
+float factor(float q_c, float p_c, double v_c, float q_a, float p_a, double v_a, double v_total, double c_puct) {
     auto v_additional = binary_search_visits(
-        [q_c, p_c, v_c, q_a, p_a, v_a, v_total](double x) {
-        return uct_value(q_c, p_c, v_c, v_total + x) - uct_value(q_a, p_a, v_a + x, v_total + x); },
+        [q_c, p_c, v_c, q_a, p_a, v_a, v_total, c_puct](double x) {
+        return uct_value(q_c, p_c, v_c, v_total + x, c_puct) - uct_value(q_a, p_a, v_a + x, v_total + x, c_puct); },
         1.0 + v_total);
 
     auto factor_ = v_total / (v_total + v_additional);
@@ -307,6 +307,8 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
     auto policy_of_actual_best = 0.0f;
     auto visits_of_best = 0.0;
     auto visits_of_actual_best = 0.0;
+    
+    auto c_puct = cfg_puct + cfg_puctscale * std::log((parentvisits + cfg_cbase)/cfg_cbase);
 
     for (auto& child : m_children) {
         if (!child.active()) {
@@ -327,13 +329,14 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
             actual_winrate = child.get_raw_eval(color);
             has_visits = true;
         }
+
         auto psa = child.get_policy();
         auto visits = child.get_visits();
         total_visited_policy += psa;
         auto denom = 1.0 + child.get_visits(VL);
         auto actual_denom = 1.0 + visits;
-        auto puct = cfg_puct * psa * (numerator / denom);
-        auto actual_puct = cfg_puct * psa * (numerator / actual_denom);
+        auto puct = c_puct * psa * (numerator / denom);
+        auto actual_puct = c_puct * psa * (numerator / actual_denom);
         auto value = winrate + puct;
         auto actual_value = actual_winrate + actual_puct;
         
@@ -362,7 +365,7 @@ std::pair<UCTNode*, float> UCTNode::uct_select_child(int color, bool is_root) {
     if (best == actual_best || !cfg_frac_backup) return std::make_pair(best->get(), 1.0f);
     return std::make_pair(best->get(), factor(q_of_best, policy_of_best, visits_of_best,
                                               q_of_actual_best, policy_of_actual_best, visits_of_actual_best,
-                                              parentvisits));
+                                              parentvisits, c_puct));
 }
 
 class NodeComp : public std::binary_function<UCTNodePointer&,
