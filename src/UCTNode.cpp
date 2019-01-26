@@ -246,7 +246,9 @@ void UCTNode::accumulate_eval(float eval) {
 }
 
 float uct_value(float q, float p, double v, double v_total) {
-    return q + cfg_puct * p * sqrt(v_total) / (1.0 + v);
+    return q + cfg_puct * 
+        std::sqrt(double(v_total) * std::log(cfg_logpuct * double(v_total) + cfg_logconst)) *
+        p / (1.0 + v);
 }
 
 double binary_search_visits(std::function<double(double)> f, double v_init) {
