@@ -34,22 +34,24 @@ import unittest
 
 # 16 planes, 1 side to move, 1 x 362 probs, 1 winner = 19 lines
 DATA_ITEM_LINES = 16 + 1 + 1 + 1
+BOARD_SIZE = 19
+NUM_INTERSECTIONS = BOARD_SIZE * BOARD_SIZE
 
 def remap_vertex(vertex, symmetry):
     """
         Remap a go board coordinate according to a symmetry.
     """
-    assert vertex >= 0 and vertex < 361
-    x = vertex % 19
-    y = vertex // 19
+    assert vertex >= 0 and vertex < NUM_INTERSECTIONS
+    x = vertex % BOARD_SIZE
+    y = vertex // BOARD_SIZE
     if symmetry >= 4:
         x, y = y, x
         symmetry -= 4
     if symmetry == 1 or symmetry == 3:
-        x = 19 - x - 1
+        x = BOARD_SIZE - x - 1
     if symmetry == 2 or symmetry == 3:
-        y = 19 - y - 1
-    return y * 19 + x
+        y = BOARD_SIZE - y - 1
+    return y * BOARD_SIZE + x
 
 # Interface for a chunk data source.
 class ChunkDataSrc:
@@ -100,11 +102,11 @@ class ChunkParser:
         # The last element is 'pass' and is identity mapped.
         self.prob_reflection_table = [
             [remap_vertex(vertex, sym)
-              for vertex in range(361)]+[361] for sym in range(8)]
+              for vertex in range(NUM_INTERSECTIONS)]+[NUM_INTERSECTIONS] for sym in range(8)]
         # Build full 16-plane reflection tables.
         self.full_reflection_table = [
-            np.array([remap_vertex(vertex, sym) + p * 361
-                for p in range(16) for vertex in range(361)])
+            np.array([remap_vertex(vertex, sym) + p * NUM_INTERSECTIONS
+                for p in range(16) for vertex in range(NUM_INTERSECTIONS)])
                     for sym in range(8)]
         # Convert both to np.array.
         # This avoids a conversion step when they're actually used.
@@ -112,8 +114,8 @@ class ChunkParser:
             np.array(x, dtype=np.int64) for x in self.prob_reflection_table ]
         self.full_reflection_table = [
             np.array(x, dtype=np.int64) for x in self.full_reflection_table ]
-        # Build the all-zeros and all-ones flat planes, used for color-to-move.
-        self.flat_planes = [ b'\1'*361 + b'\0'*361, b'\0'*361 + b'\1'*361 ]
+        # (No longer in use) Build the all-zeros and all-ones flat planes, used for color-to-move.
+        self.flat_planes = [ b'\1'*NUM_INTERSECTIONS + b'\0'*NUM_INTERSECTIONS, b'\0'*NUM_INTERSECTIONS + b'\1'*NUM_INTERSECTIONS ]
 
         # set the down-sampling rate
         self.sample = sample
@@ -147,7 +149,9 @@ class ChunkParser:
         # 19*19*16 packed bit planes (722 bytes)
         # float32 side_to_move (4 bytes)
         # uint8 is_winner (1 byte)
-        self.v2_struct = struct.Struct('4s1448s722sfB')
+        PROB_LEN = 4 * (NUM_INTERSECTIONS + 1)
+        PLANE_LEN = 2 * NUM_INTERSECTIONS
+        self.v2_struct = struct.Struct('4s' + str(PROB_LEN) + 's' + str(PLANE_LEN) + 'sfB')
 
         # Struct used to return data from child workers.
         # float32 winner
@@ -155,7 +159,9 @@ class ChunkParser:
         # uint*6498 planes
         # (order is to ensure that no padding is required to
         #  make float32 be 32-bit aligned)
-        self.raw_struct = struct.Struct('4s1448s6498s')
+        # not in use ?
+        PLANE_LEN = 18 * NUM_INTERSECTIONS
+        self.raw_struct = struct.Struct('4s' + str(PROB_LEN) + 's' + str(PLANE_LEN) + 's')
 
     def convert_v1_to_v2(self, text_item):
         """
@@ -172,12 +178,12 @@ class ChunkParser:
         planes = []
         for plane in range(0, 16):
             # first 360 first bits are 90 hex chars, encoded MSB
-            hex_string = text_item[plane][0:90]
+            hex_string = text_item[plane][0:(NUM_INTERSECTIONS//4)]
             array = np.unpackbits(np.frombuffer(
                 bytearray.fromhex(hex_string), dtype=np.uint8))
             # Remaining bit that didn't fit. Encoded LSB so
             # it needs to be specially handled.
-            last_digit = text_item[plane][90]
+            last_digit = text_item[plane][NUM_INTERSECTIONS//4]
             if not (last_digit == "0" or last_digit == "1"):
                 return False, None
             # Apply symmetry and append
@@ -191,9 +197,6 @@ class ChunkParser:
 
         # Get the 'side to move'
         stm = float(text_item[16])
-        #if not(stm == "0" or stm == "1"):
-        #    return False, None
-        #stm = int(stm)
 
         # Load the probabilities.
         probabilities = np.array(text_item[17].split()).astype(np.float32)
@@ -201,11 +204,11 @@ class ChunkParser:
             # Work around a bug in leela-zero v0.3, skipping any
             # positions that have a NaN in the probabilities list.
             return False, None
-        if not(len(probabilities) == 362):
+        if not(len(probabilities) == NUM_INTERSECTIONS+1):
             return False, None
 
         probs = probabilities.tobytes()
-        if not(len(probs) == 362 * 4):
+        if not(len(probs) == (NUM_INTERSECTIONS+1) * 4):
             return False, None
 
         # Load the game winner color.
@@ -231,14 +234,14 @@ class ChunkParser:
         # We use the full length reflection tables to apply symmetry
         # to all 16 planes simultaneously
         planes = planes[self.full_reflection_table[symmetry]]
-        assert len(planes) == 19*19*16
+        assert len(planes) == NUM_INTERSECTIONS*16
         planes = np.packbits(planes)
         planes = planes.tobytes()
 
         probs = np.frombuffer(probs, dtype=np.float32)
         # Apply symmetries to the probabilities.
         probs = probs[self.prob_reflection_table[symmetry]]
-        assert len(probs) == 362
+        assert len(probs) == NUM_INTERSECTIONS+1
         probs = probs.tobytes()
 
         # repack record.
@@ -264,13 +267,13 @@ class ChunkParser:
         (ver, probs, planes, to_move, winner) = self.v2_struct.unpack(content)
         # Unpack planes.
         planes = np.unpackbits(np.frombuffer(planes, dtype=np.uint8)).astype('f')
-        assert len(planes) == 19*19*16
+        assert len(planes) == NUM_INTERSECTIONS*16
         # Now we add the two final planes, being the 'color to move' planes.
         stm = to_move
         # assert stm == 0 or stm == 1
         # Flattern all planes to a single byte string
-        planes = planes.tobytes() + (np.array([1.0-stm]*361 + [stm]*361)).astype('f').tobytes()
-        assert len(planes) == (18 * 19 * 19 * 4), len(planes)
+        planes = planes.tobytes() + (np.array([1.0-stm]*NUM_INTERSECTIONS + [stm]*NUM_INTERSECTIONS)).astype('f').tobytes()
+        assert len(planes) == (18 * NUM_INTERSECTIONS * 4), len(planes)
 
         winner = float(winner * 2 - 1)
         assert winner == 1.0 or winner == -1.0, winner
@@ -391,13 +394,13 @@ class ChunkParserTest(unittest.TestCase):
             Result is ([[361] * 18], [362], [1])
         """
         # 1. 18 binary planes of length 361
-        planes = [np.random.randint(2, size=361).tolist()
+        planes = [np.random.randint(2, size=NUM_INTERSECTIONS).tolist()
                   for plane in range(16)]
         stm = float(np.random.randint(2))
-        planes.append([stm] * 361)
-        planes.append([1. - stm] * 361)
+        planes.append([stm] * NUM_INTERSECTIONS)
+        planes.append([1. - stm] * NUM_INTERSECTIONS)
         # 2. 362 probs
-        probs = np.random.randint(3, size=362).tolist()
+        probs = np.random.randint(3, size=NUM_INTERSECTIONS+1).tolist()
         # 3. And a winner: 1 or -1
         winner = [ 2 * float(np.random.randint(2)) - 1 ]
         return (planes, probs, winner)
@@ -418,9 +421,9 @@ class ChunkParserTest(unittest.TestCase):
         items = []
         for p in range(16):
             # generate first 360 bits
-            h = np.packbits([int(x) for x in planes[p][0:360]]).tobytes().hex()
+            h = np.packbits([int(x) for x in planes[p][0:(NUM_INTERSECTIONS-1)]]).tobytes().hex()
             # then add the stray single bit
-            h += str(planes[p][360]) + "\n"
+            h += str(planes[p][NUM_INTERSECTIONS-1]) + "\n"
             items.append(h)
         # then side to move
         items.append(str(int(planes[17][0])) + "\n")
@@ -443,9 +446,9 @@ class ChunkParserTest(unittest.TestCase):
 
         # Convert batch to python lists.
         batch = ( np.reshape(np.frombuffer(data[0], dtype=np.uint8),
-                             (batch_size, 18, 19*19)).tolist(),
+                             (batch_size, 18, NUM_INTERSECTIONS)).tolist(),
                   np.reshape(np.frombuffer(data[1], dtype=np.float32),
-                             (batch_size, 19*19+1)).tolist(),
+                             (batch_size, NUM_INTERSECTIONS+1)).tolist(),
                   np.reshape(np.frombuffer(data[2], dtype=np.float32),
                              (batch_size, 1)).tolist() )
 
@@ -460,11 +463,11 @@ class ChunkParserTest(unittest.TestCase):
                 # Apply the symmetry to the original
                 sym_planes = [
                     [plane[remap_vertex(vertex, symmetry)]
-                        for vertex in range(361)]
+                        for vertex in range(NUM_INTERSECTIONS)]
                             for plane in planes]
                 sym_probs = [
                     probs[remap_vertex(vertex, symmetry)]
-                        for vertex in range(361)] + [probs[361]]
+                        for vertex in range(NUM_INTERSECTIONS)] + [probs[NUM_INTERSECTIONS]]
 
                 if symmetry == 0:
                     assert sym_planes == planes
