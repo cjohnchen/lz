@@ -22,9 +22,7 @@ import os
 import tensorflow as tf
 import time
 import unittest
-
-BOARD_SIZE = 19
-NUM_INTERSECTIONS = BOARD_SIZE * BOARD_SIZE
+from config import *
 
 def weight_variable(name, shape):
     """Xavier initialization"""
