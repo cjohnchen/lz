@@ -31,11 +31,10 @@ import sys
 import threading
 import time
 import unittest
+from config import *
 
 # 16 planes, 1 side to move, 1 x 362 probs, 1 winner = 19 lines
 DATA_ITEM_LINES = 16 + 1 + 1 + 1
-BOARD_SIZE = 19
-NUM_INTERSECTIONS = BOARD_SIZE * BOARD_SIZE
 
 def remap_vertex(vertex, symmetry):
     """
