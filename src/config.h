@@ -32,12 +32,18 @@
 
 /*
  * BOARD_SIZE: Define size of the board to compile Leela with, must be an odd
-   number due to winograd tiles
+ * number due to winograd tiles
  */
 static constexpr auto BOARD_SIZE = 19;
 static_assert(BOARD_SIZE % 2 == 1, "Code assumes odd board size, remove at your own risk!");
 
-static constexpr auto BOARD_SQUARES = BOARD_SIZE * BOARD_SIZE;
+static constexpr auto NUM_INTERSECTIONS = BOARD_SIZE * BOARD_SIZE;
+
+/*
+ * TRAINED_UNIT_KOMI: Define the komi used during training that represents a
+ * value of 1.0 for the side to move NN inputs
+ */
+static constexpr auto TRAINED_UNIT_KOMI = 7.5f;
 
 /*
  * Features

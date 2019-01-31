@@ -226,11 +226,11 @@ void convolve(const size_t outputs,
     // The size of the board is defined at compile time
     constexpr unsigned int width = BOARD_SIZE;
     constexpr unsigned int height = BOARD_SIZE;
-    constexpr auto board_squares = width * height;
+    constexpr auto NUM_INTERSECTIONS = width * height;
     constexpr auto filter_len = filter_size * filter_size;
     const auto input_channels = weights.size() / (biases.size() * filter_len);
     const auto filter_dim = filter_len * input_channels;
-    assert(outputs * board_squares == output.size());
+    assert(outputs * NUM_INTERSECTIONS == output.size());
 
     std::vector<float> col(filter_dim * width * height);
     im2col<filter_size>(input_channels, input, col);
@@ -249,14 +249,14 @@ void convolve(const size_t outputs,
 
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 // M        N            K
-                outputs, board_squares, filter_dim,
+                outputs, NUM_INTERSECTIONS, filter_dim,
                 1.0f, &weights[0], filter_dim,
-                &col[0], board_squares,
-                0.0f, &output[0], board_squares);
+                &col[0], NUM_INTERSECTIONS,
+                0.0f, &output[0], NUM_INTERSECTIONS);
 
     for (unsigned int o = 0; o < outputs; o++) {
-        for (unsigned int b = 0; b < board_squares; b++) {
-            output[(o * board_squares) + b] += biases[o];
+        for (unsigned int b = 0; b < NUM_INTERSECTIONS; b++) {
+            output[(o * NUM_INTERSECTIONS) + b] += biases[o];
         }
     }
 }
@@ -335,10 +335,10 @@ void global_avg_pooling(const size_t channels,
 
     for ( auto c = size_t{0}; c < channels; c++) {
         auto acc = 0.0f;
-        for ( auto i = size_t{0}; i < BOARD_SQUARES; i++) {
-            acc += input[c * BOARD_SQUARES + i];
+        for ( auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
+            acc += input[c * NUM_INTERSECTIONS + i];
         }
-        output[c] = acc/BOARD_SQUARES;
+        output[c] = acc/NUM_INTERSECTIONS;
     }
 }
 
@@ -357,9 +357,9 @@ void apply_se(const size_t channels,
     for ( auto c = size_t{0}; c < channels; c++) {
         auto sig_scale = lambda_sigmoid(scale[c]);
         auto alpha = prelu_alphas[c];
-        for ( auto i = size_t{0}; i < BOARD_SQUARES; i++) {
-            output[c * BOARD_SQUARES + i] = lambda_ReLU(sig_scale * input[c * BOARD_SQUARES + i]
-                                          + res[c * BOARD_SQUARES + i], alpha);
+        for ( auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
+            output[c * NUM_INTERSECTIONS + i] = lambda_ReLU(sig_scale * input[c * NUM_INTERSECTIONS + i]
+                                          + res[c * NUM_INTERSECTIONS + i], alpha);
         }
     }
 }
@@ -376,13 +376,13 @@ void CPUPipe::forward(const std::vector<float>& input,
     // might be bigger when the network has very few filters
     const auto input_channels = std::max(static_cast<size_t>(output_channels),
                                          static_cast<size_t>(Network::INPUT_CHANNELS));
-    auto conv_out = std::vector<float>(output_channels * BOARD_SQUARES);
+    auto conv_out = std::vector<float>(output_channels * NUM_INTERSECTIONS);
 
     auto V = std::vector<float>(WINOGRAD_TILE * input_channels * P);
     auto M = std::vector<float>(WINOGRAD_TILE * output_channels * P);
 
     winograd_convolve3(output_channels, input, m_conv_weights[0], V, M, conv_out);
-    batchnorm<BOARD_SQUARES>(output_channels, conv_out,
+    batchnorm<NUM_INTERSECTIONS>(output_channels, conv_out,
                              m_batchnorm_means[0].data(),
                              m_batchnorm_stddivs[0].data(),
                              m_prelu_alphas[0].data());
@@ -390,15 +390,15 @@ void CPUPipe::forward(const std::vector<float>& input,
 
     // Residual tower
     auto pooling = std::vector<float>(output_channels);
-    auto conv_in = std::vector<float>(output_channels * BOARD_SQUARES);
-    auto res = std::vector<float>(output_channels * BOARD_SQUARES);
+    auto conv_in = std::vector<float>(output_channels * NUM_INTERSECTIONS);
+    auto res = std::vector<float>(output_channels * NUM_INTERSECTIONS);
     auto block = 0;
     for (auto i = size_t{1}; i < m_conv_weights.size(); i += 2) {
         auto output_channels = m_batchnorm_stddivs[i].size();
         std::swap(conv_out, conv_in);
         winograd_convolve3(output_channels, conv_in,
                            m_conv_weights[i], V, M, conv_out);
-        batchnorm<BOARD_SQUARES>(output_channels, conv_out,
+        batchnorm<NUM_INTERSECTIONS>(output_channels, conv_out,
                                  m_batchnorm_means[i].data(),
                                  m_batchnorm_stddivs[i].data(),
                                  m_prelu_alphas[i].data());
@@ -407,7 +407,7 @@ void CPUPipe::forward(const std::vector<float>& input,
         std::swap(conv_out, conv_in);
         winograd_convolve3(output_channels, conv_in,
                            m_conv_weights[i + 1], V, M, conv_out);
-        batchnorm<BOARD_SQUARES>(output_channels, conv_out,
+        batchnorm<NUM_INTERSECTIONS>(output_channels, conv_out,
                                  m_batchnorm_means[i + 1].data(),
                                  m_batchnorm_stddivs[i + 1].data(),
                                  m_prelu_alphas[i + 1].data(),

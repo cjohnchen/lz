@@ -88,6 +88,7 @@ public:
     static void show_heatmap(const FastState * const state,
                              const Netresult & netres, const bool topmoves);
 
+    static float get_normalised_komi(const GameState* const state);
     static std::vector<float> gather_features(const GameState* const state,
                                               const int symmetry);
     static std::pair<int, int> get_symmetry(const std::pair<int, int>& vertex,
@@ -170,8 +171,8 @@ private:
     std::array<float, 2> m_bn_pol_w2;
     std::array<float, 2> m_prelu_pol_alpha;
 
-    std::array<float, (BOARD_SQUARES + 1) * BOARD_SQUARES * 2> m_ip_pol_w;
-    std::array<float, BOARD_SQUARES + 1> m_ip_pol_b;
+    std::array<float, (NUM_INTERSECTIONS + 1) * NUM_INTERSECTIONS * 2> m_ip_pol_w;
+    std::array<float, NUM_INTERSECTIONS + 1> m_ip_pol_b;
 
     // Value head
     std::vector<float> m_conv_val_w;
@@ -180,7 +181,7 @@ private:
     std::array<float, 1> m_bn_val_w2;
     std::array<float, 1> m_prelu_val_alpha;
 
-    std::array<float, BOARD_SQUARES * 256> m_ip1_val_w;
+    std::array<float, NUM_INTERSECTIONS * 256> m_ip1_val_w;
     std::array<float, 256> m_ip1_val_b;
 
     std::array<float, 256> m_ip2_val_w;

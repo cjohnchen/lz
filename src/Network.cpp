@@ -64,7 +64,7 @@ namespace x3 = boost::spirit::x3;
 using namespace Utils;
 
 // Symmetry helper
-static std::array<std::array<int, BOARD_SQUARES>, Network::NUM_SYMMETRIES> symmetry_nn_idx_table;
+static std::array<std::array<int, NUM_INTERSECTIONS>, Network::NUM_SYMMETRIES> symmetry_nn_idx_table;
 
 float Network::benchmark_time(int centiseconds) {
     const auto cpus = cfg_num_threads;
@@ -74,7 +74,7 @@ float Network::benchmark_time(int centiseconds) {
     std::atomic<int> runcount{0};
 
     GameState state;
-    state.init_game(BOARD_SIZE, 7.5);
+    state.init_game(BOARD_SIZE, TRAINED_UNIT_KOMI);
     for (auto i = 0; i < cpus; i++) {
         tg.add_task([this, &runcount, start, centiseconds, state]() {
             while (true) {
@@ -408,10 +408,10 @@ void Network::initialize(int playouts, const std::string & weightsfile) {
     m_nncache.set_size_from_playouts(playouts);
     // Prepare symmetry table
     for (auto s = 0; s < NUM_SYMMETRIES; ++s) {
-        for (auto v = 0; v < BOARD_SQUARES; ++v) {
+        for (auto v = 0; v < NUM_INTERSECTIONS; ++v) {
             const auto newvtx = get_symmetry({v % BOARD_SIZE, v / BOARD_SIZE}, s);
             symmetry_nn_idx_table[s][v] = (newvtx.second * BOARD_SIZE) + newvtx.first;
-            assert(symmetry_nn_idx_table[s][v] >= 0 && symmetry_nn_idx_table[s][v] < BOARD_SQUARES);
+            assert(symmetry_nn_idx_table[s][v] >= 0 && symmetry_nn_idx_table[s][v] < NUM_INTERSECTIONS);
         }
     }
 
@@ -760,8 +760,8 @@ bool Network::probe_cache(const GameState* const state,
             const auto hash = state->get_symmetry_hash(sym);
             if (m_nncache.lookup(hash, result)) {
                 decltype(result.policy) corrected_policy;
-                corrected_policy.reserve(BOARD_SQUARES);
-                for (auto idx = size_t{0}; idx < BOARD_SQUARES; ++idx) {
+                corrected_policy.reserve(NUM_INTERSECTIONS);
+                for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; ++idx) {
                     const auto sym_idx = symmetry_nn_idx_table[sym][idx];
                     corrected_policy.emplace_back(result.policy[sym_idx]);
                 }
@@ -798,7 +798,7 @@ Network::Netresult Network::get_output(
             result.winrate += tmpresult.winrate / static_cast<float>(NUM_SYMMETRIES);
             result.policy_pass += tmpresult.policy_pass / static_cast<float>(NUM_SYMMETRIES);
 
-            for (auto idx = size_t{0}; idx < BOARD_SQUARES; idx++) {
+            for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
                 result.policy[idx] += tmpresult.policy[idx] / static_cast<float>(NUM_SYMMETRIES);
             }
         }
@@ -853,18 +853,18 @@ Network::Netresult Network::get_output_internal(
 #endif
 
     // Get the moves
-    batchnorm<BOARD_SQUARES>(OUTPUTS_POLICY, policy_data,
+    batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY, policy_data,
         m_bn_pol_w1.data(), m_bn_pol_w2.data(), m_prelu_pol_alpha.data());
     const auto policy_out =
-        innerproduct<OUTPUTS_POLICY * BOARD_SQUARES, BOARD_SQUARES + 1, false>(
+        innerproduct<OUTPUTS_POLICY * NUM_INTERSECTIONS, NUM_INTERSECTIONS + 1, false>(
             policy_data, m_ip_pol_w, m_ip_pol_b);
     const auto outputs = softmax(policy_out, cfg_softmax_temp);
 
     // Now get the value
-    batchnorm<BOARD_SQUARES>(OUTPUTS_VALUE, value_data,
+    batchnorm<NUM_INTERSECTIONS>(OUTPUTS_VALUE, value_data,
         m_bn_val_w1.data(), m_bn_val_w2.data(), m_prelu_val_alpha.data());
     const auto winrate_data =
-        innerproduct<BOARD_SQUARES, 256, true>(value_data, m_ip1_val_w, m_ip1_val_b);
+        innerproduct<NUM_INTERSECTIONS, 256, true>(value_data, m_ip1_val_w, m_ip1_val_b);
     const auto winrate_out =
         innerproduct<256, 1, false>(winrate_data, m_ip2_val_w, m_ip2_val_b);
 
@@ -873,12 +873,12 @@ Network::Netresult Network::get_output_internal(
 
     Netresult result;
 
-    for (auto idx = size_t{0}; idx < BOARD_SQUARES; idx++) {
+    for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
         result.policy[sym_idx] = outputs[idx];
     }
 
-    result.policy_pass = outputs[BOARD_SQUARES];
+    result.policy_pass = outputs[NUM_INTERSECTIONS];
     result.winrate = winrate;
 
     return result;
@@ -914,7 +914,7 @@ void Network::show_heatmap(const FastState* const state,
 
     if (topmoves) {
         std::vector<Network::PolicyVertexPair> moves;
-        for (auto i=0; i < BOARD_SQUARES; i++) {
+        for (auto i=0; i < NUM_INTERSECTIONS; i++) {
             const auto x = i % BOARD_SIZE;
             const auto y = i / BOARD_SIZE;
             const auto vertex = state->board.get_vertex(x, y);
@@ -943,7 +943,7 @@ void Network::fill_input_plane_pair(const FullBoard& board,
                                     std::vector<float>::iterator black,
                                     std::vector<float>::iterator white,
                                     const int symmetry) {
-    for (auto idx = 0; idx < BOARD_SQUARES; idx++) {
+    for (auto idx = 0; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
         const auto x = sym_idx % BOARD_SIZE;
         const auto y = sym_idx / BOARD_SIZE;
@@ -960,7 +960,7 @@ void Network::legal_plane(const GameState* const state,
                           std::vector<float>::iterator legal,
                           const int symmetry) {
     const auto to_move = state->board.get_to_move();
-    for (auto idx = 0; idx < BOARD_SQUARES; idx++) {
+    for (auto idx = 0; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
         const auto x = sym_idx % BOARD_SIZE;
         const auto y = sym_idx / BOARD_SIZE;
@@ -979,7 +979,7 @@ void Network::fill_liberty_planes(const FullBoard& board,
                                   std::vector<float>::iterator planes_white,
                                   const int plane_count,
                                   const int symmetry) {
-    for (auto idx = 0; idx < BOARD_SQUARES; idx++) {
+    for (auto idx = 0; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
         const auto x = sym_idx % BOARD_SIZE;
         const auto y = sym_idx / BOARD_SIZE;
@@ -991,9 +991,9 @@ void Network::fill_liberty_planes(const FullBoard& board,
                 libs = plane_count;
             }
             if (color == FastBoard::BLACK) {
-                planes_black[(libs-1) * BOARD_SQUARES + idx] = true;
+                planes_black[(libs-1) * NUM_INTERSECTIONS + idx] = true;
             } else {
-                planes_white[(libs-1) * BOARD_SQUARES + idx] = true;
+                planes_white[(libs-1) * NUM_INTERSECTIONS + idx] = true;
             }
         }
     }
@@ -1003,7 +1003,7 @@ void Network::fill_ladder_planes(const GameState* const state,
                                  std::vector<float>::iterator captures,
                                  std::vector<float>::iterator escapes,
                                  const int symmetry) {
-    for (auto idx = 0; idx < BOARD_SQUARES; idx++) {
+    for (auto idx = 0; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
         const auto x = sym_idx % BOARD_SIZE;
         const auto y = sym_idx / BOARD_SIZE;
@@ -1016,52 +1016,65 @@ void Network::fill_ladder_planes(const GameState* const state,
         }
     }
 }
+			
+float Network::get_normalised_komi(const GameState* const state) {
+    const auto norm_komi = 0.5f + (state->get_komi() / (2.0f * TRAINED_UNIT_KOMI));
+    return norm_komi;
+}
 
 std::vector<float> Network::gather_features(const GameState* const state,
                                             const int symmetry) {
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
-    auto input_data = std::vector<float>(INPUT_CHANNELS * BOARD_SQUARES);
+    auto input_data = std::vector<float>(INPUT_CHANNELS * NUM_INTERSECTIONS);
 
     const auto to_move = state->get_to_move();
     const auto blacks_move = to_move == FastBoard::BLACK;
 
     const auto black_it = blacks_move ?
                           begin(input_data) :
-                          begin(input_data) + INPUT_MOVES * BOARD_SQUARES;
+                          begin(input_data) + INPUT_MOVES * NUM_INTERSECTIONS;
     const auto white_it = blacks_move ?
-                          begin(input_data) + INPUT_MOVES * BOARD_SQUARES :
+                          begin(input_data) + INPUT_MOVES * NUM_INTERSECTIONS :
                           begin(input_data);
 
-    const auto legal_it = begin(input_data) + (2 * INPUT_MOVES) * BOARD_SQUARES;
+    const auto legal_it = begin(input_data) + (2 * INPUT_MOVES) * NUM_INTERSECTIONS;
 
-    const auto liberties_our   = begin(input_data) + (2 * INPUT_MOVES + 1) * BOARD_SQUARES;
+    const auto liberties_our   = begin(input_data) + (2 * INPUT_MOVES + 1) * NUM_INTERSECTIONS;
     const auto liberties_other = begin(input_data) + \
-        (2 * INPUT_MOVES + 1 + LIBERTY_PLANES) * BOARD_SQUARES;
+        (2 * INPUT_MOVES + 1 + LIBERTY_PLANES) * NUM_INTERSECTIONS;
 
     const auto liberties_black_it = blacks_move ? liberties_our : liberties_other;
     const auto liberties_white_it = blacks_move ? liberties_other : liberties_our;
 
     const auto captures_it = begin(input_data) + \
-        (2 * INPUT_MOVES + 1 + 2 * LIBERTY_PLANES) * BOARD_SQUARES;
+        (2 * INPUT_MOVES + 1 + 2 * LIBERTY_PLANES) * NUM_INTERSECTIONS;
 
     const auto escapes_it = begin(input_data) + \
-        (2 * INPUT_MOVES + 1 + 2 * LIBERTY_PLANES + 1) * BOARD_SQUARES;
+        (2 * INPUT_MOVES + 1 + 2 * LIBERTY_PLANES + 1) * NUM_INTERSECTIONS;
 
     const auto to_move_it = blacks_move ?
-        begin(input_data) + (2 * INPUT_MOVES + 1 + 2 * LIBERTY_PLANES + 2) * BOARD_SQUARES :
-        begin(input_data) + (2 * INPUT_MOVES + 1 + 2 * LIBERTY_PLANES + 3) * BOARD_SQUARES;
+        begin(input_data) + (2 * INPUT_MOVES + 1 + 2 * LIBERTY_PLANES + 2) * NUM_INTERSECTIONS :
+        begin(input_data) + (2 * INPUT_MOVES + 1 + 2 * LIBERTY_PLANES + 3) * NUM_INTERSECTIONS;
 
     const auto moves = std::min<size_t>(state->get_movenum() + 1, INPUT_MOVES);
     // Go back in time, fill history boards
     for (auto h = size_t{0}; h < moves; h++) {
         // collect white, black occupation planes
         fill_input_plane_pair(state->get_past_board(h),
-                              black_it + h * BOARD_SQUARES,
-                              white_it + h * BOARD_SQUARES,
+                              black_it + h * NUM_INTERSECTIONS,
+                              white_it + h * NUM_INTERSECTIONS,
                               symmetry);
     }
+	
+    const auto black_to_move_it = begin(input_data) + 2 * INPUT_MOVES * NUM_INTERSECTIONS;
+    const auto white_to_move_it = black_to_move_it + NUM_INTERSECTIONS;
+    const auto pos_komi = get_normalised_komi(state);
+    const auto neg_komi = 1.0f - pos_komi;
+    const auto black_komi = blacks_move ? pos_komi : neg_komi;
+    const auto white_komi = blacks_move ? neg_komi : pos_komi;
 
-    std::fill(to_move_it, to_move_it + BOARD_SQUARES, float(true));
+    std::fill(black_to_move_it, black_to_move_it + NUM_INTERSECTIONS, black_komi);
+    std::fill(white_to_move_it, white_to_move_it + NUM_INTERSECTIONS, white_komi);
 
     legal_plane(state, legal_it, symmetry);
 

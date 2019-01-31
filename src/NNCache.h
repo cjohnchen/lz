@@ -39,7 +39,7 @@ public:
         // winrate
         float winrate;
 
-        Netresult() : policy(BOARD_SQUARES), policy_pass(0.0f), winrate(0.0f) {}
+        Netresult() : policy(NUM_INTERSECTIONS), policy_pass(0.0f), winrate(0.0f) {}
     };
 
     NNCache(int size = 150000);  // ~ 225MB
