@@ -17,5 +17,5 @@
 #    along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
 
 # Board size and number of squares in a board. Board size must be an odd number!
-BOARD_SIZE = 19
+BOARD_SIZE = 9
 NUM_INTERSECTIONS = BOARD_SIZE * BOARD_SIZE
