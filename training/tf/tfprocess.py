@@ -23,6 +23,8 @@ import tensorflow as tf
 import time
 import unittest
 
+BOARD_SIZE = 19
+NUM_INTERSECTIONS = BOARD_SIZE * BOARD_SIZE
 
 def weight_variable(name, shape):
     """Xavier initialization"""
@@ -155,8 +157,8 @@ class TFProcess:
 
         # planes = tf.to_float(planes)
 
-        planes = tf.reshape(planes, (batch_size, 18, 19*19))
-        probs = tf.reshape(probs, (batch_size, 19*19 + 1))
+        planes = tf.reshape(planes, (batch_size, 18, NUM_INTERSECTIONS))
+        probs = tf.reshape(probs, (batch_size, NUM_INTERSECTIONS + 1))
         winner = tf.reshape(winner, (batch_size, 1))
 
         if gpus_num is None:
@@ -565,7 +567,7 @@ class TFProcess:
     def construct_net(self, planes):
         # NCHW format
         # batch, 18 channels, 19 x 19
-        x_planes = tf.reshape(planes, [-1, 18, 19, 19])
+        x_planes = tf.reshape(planes, [-1, 18, BOARD_SIZE, BOARD_SIZE])
 
         # Input convolution
         flow = self.conv_block(x_planes, filter_size=3,
@@ -583,9 +585,9 @@ class TFProcess:
                                    input_channels=self.RESIDUAL_FILTERS,
                                    output_channels=2,
                                    name="policy_head")
-        h_conv_pol_flat = tf.reshape(conv_pol, [-1, 2 * 19 * 19])
-        W_fc1 = weight_variable("w_fc_1", [2 * 19 * 19, (19 * 19) + 1])
-        b_fc1 = bias_variable("b_fc_1", [(19 * 19) + 1])
+        h_conv_pol_flat = tf.reshape(conv_pol, [-1, 2 * NUM_INTERSECTIONS])
+        W_fc1 = weight_variable("w_fc_1", [2 * NUM_INTERSECTIONS, NUM_INTERSECTIONS + 1])
+        b_fc1 = bias_variable("b_fc_1", [NUM_INTERSECTIONS + 1])
         self.add_weights(W_fc1)
         self.add_weights(b_fc1)
         h_fc1 = tf.add(tf.matmul(h_conv_pol_flat, W_fc1), b_fc1)
@@ -595,8 +597,8 @@ class TFProcess:
                                    input_channels=self.RESIDUAL_FILTERS,
                                    output_channels=1,
                                    name="value_head")
-        h_conv_val_flat = tf.reshape(conv_val, [-1, 19 * 19])
-        W_fc2 = weight_variable("w_fc_2", [19 * 19, 256])
+        h_conv_val_flat = tf.reshape(conv_val, [-1, NUM_INTERSECTIONS])
+        W_fc2 = weight_variable("w_fc_2", [NUM_INTERSECTIONS, 256])
         b_fc2 = bias_variable("b_fc_2", [256])
         self.add_weights(W_fc2)
         self.add_weights(b_fc2)
@@ -686,11 +688,11 @@ class TFProcessTest(unittest.TestCase):
                 tfprocess.RESIDUAL_FILTERS, tfprocess.RESIDUAL_FILTERS))
         # policy
         data.extend(gen_block(1, tfprocess.RESIDUAL_FILTERS, 2))
-        data.append([0.4] * 2*19*19 * (19*19+1))
-        data.append([0.5] * (19*19+1))
+        data.append([0.4] * 2*NUM_INTERSECTIONS * (NUM_INTERSECTIONS+1))
+        data.append([0.5] * (NUM_INTERSECTIONS+1))
         # value
         data.extend(gen_block(1, tfprocess.RESIDUAL_FILTERS, 1))
-        data.append([0.6] * 19*19 * 256)
+        data.append([0.6] * NUM_INTERSECTIONS * 256)
         data.append([0.7] * 256)
         data.append([0.8] * 256)
         data.append([0.9] * 1)
