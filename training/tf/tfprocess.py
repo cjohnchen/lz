@@ -24,20 +24,20 @@ import time
 import unittest
 
 
-def weight_variable(name, shape):
+def weight_variable(name, shape, trainable=False):
     """Xavier initialization"""
     stddev = np.sqrt(2.0 / (sum(shape)))
     initial = tf.truncated_normal(shape, stddev=stddev)
-    weights = tf.get_variable(name, initializer=initial)
+    weights = tf.get_variable(name, initializer=initial, trainable=trainable)
     tf.add_to_collection(tf.GraphKeys.WEIGHTS, weights)
     return weights
 
 # Bias weights for layers not followed by BatchNorm
 # We do not regularlize biases, so they are not
 # added to the regularlizer collection
-def bias_variable(name, shape):
+def bias_variable(name, shape, trainable=False):
     initial = tf.constant(0.0, shape=shape)
-    bias = tf.get_variable(name, initializer=initial)
+    bias = tf.get_variable(name, initializer=initial, trainable=trainable)
     return bias
 
 
@@ -517,6 +517,7 @@ class TFProcess:
                     epsilon=1e-5, axis=1, fused=True,
                     center=True, scale=False,
                     training=self.training,
+                    trainable=False,
                     reuse=self.reuse_var)
 
         for v in ['beta', 'moving_mean', 'moving_variance' ]:
@@ -584,8 +585,8 @@ class TFProcess:
                                    output_channels=2,
                                    name="policy_head")
         h_conv_pol_flat = tf.reshape(conv_pol, [-1, 2 * 19 * 19])
-        W_fc1 = weight_variable("w_fc_1", [2 * 19 * 19, (19 * 19) + 1])
-        b_fc1 = bias_variable("b_fc_1", [(19 * 19) + 1])
+        W_fc1 = weight_variable("w_fc_1", [2 * 19 * 19, (19 * 19) + 1], trainable=True)
+        b_fc1 = bias_variable("b_fc_1", [(19 * 19) + 1], trainable=True)
         self.add_weights(W_fc1)
         self.add_weights(b_fc1)
         h_fc1 = tf.add(tf.matmul(h_conv_pol_flat, W_fc1), b_fc1)
@@ -596,7 +597,7 @@ class TFProcess:
                                    output_channels=1,
                                    name="value_head")
         h_conv_val_flat = tf.reshape(conv_val, [-1, 19 * 19])
-        W_fc2 = weight_variable("w_fc_2", [19 * 19, 256])
+        W_fc2 = weight_variable("w_fc_2", [19 * 19, 256], trainable=True)
         b_fc2 = bias_variable("b_fc_2", [256])
         self.add_weights(W_fc2)
         self.add_weights(b_fc2)
