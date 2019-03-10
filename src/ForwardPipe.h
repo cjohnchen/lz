@@ -44,6 +44,10 @@ public:
         std::vector<std::vector<float>> m_conv_biases;
         std::vector<std::vector<float>> m_batchnorm_means;
         std::vector<std::vector<float>> m_batchnorm_stddevs;
+        std::vector<std::vector<float>> m_se_fc1_weights;
+        std::vector<std::vector<float>> m_se_fc1_biases;
+        std::vector<std::vector<float>> m_se_fc2_weights;
+        std::vector<std::vector<float>> m_se_fc2_biases;
 
         // Policy head
         std::vector<float> m_conv_pol_w;

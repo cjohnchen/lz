@@ -4,3 +4,6 @@
 [submodule "src/Eigen"]
 	path = src/Eigen
 	url = https://github.com/eigenteam/eigen-git-mirror
+[submodule "clblast"]
+	path = clblast
+	url = https://github.com/CNugteren/CLBlast.git

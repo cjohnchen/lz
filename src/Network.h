@@ -175,5 +175,6 @@ private:
     std::array<float, VALUE_LAYER> m_ip2_val_w;
     std::array<float, 1> m_ip2_val_b;
     bool m_value_head_not_stm;
+    bool m_has_se{false};
 };
 #endif

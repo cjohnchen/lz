@@ -254,6 +254,15 @@ void OpenCLScheduler<net_t>::push_weights(
                       weights->m_conv_weights[weight_index + 1],
                       weights->m_batchnorm_means[weight_index + 1],
                       weights->m_batchnorm_stddevs[weight_index + 1]);
+        if (!weights->m_se_fc1_weights.empty()) {
+            for (const auto& opencl_net : m_networks) {
+                opencl_net->push_se(i,
+                    weights->m_se_fc1_weights[i],
+                    weights->m_se_fc1_biases[i],
+                    weights->m_se_fc2_weights[i],
+                    weights->m_se_fc2_biases[i]);
+            }
+        }
         weight_index += 2;
     }
 

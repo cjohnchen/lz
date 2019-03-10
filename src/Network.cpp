@@ -228,7 +228,9 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     // Count size of the network
     myprintf("Detecting residual layers...");
     // We are version 1 or 2
-    if (m_value_head_not_stm) {
+    if (m_has_se) {
+        myprintf("v%d: Minigo SE net...", 3);
+    } else if (m_value_head_not_stm) {
         myprintf("v%d...", 2);
     } else {
         myprintf("v%d...", 1);
@@ -250,14 +252,16 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
         }
         linecount++;
     }
-    // 1 format id, 1 input layer (4 x weights), 14 ending weights,
+    // 1 format id, 1 input layer (4 x weights), 14 ending weights, 
+    // possibly followed by SE weights;
     // the rest are residuals, every residual has 8 x weight lines
     auto residual_blocks = linecount - (1 + 4 + 14);
-    if (residual_blocks % 8 != 0) {
+    auto lines_per_block = m_has_se ? 12 : 8;
+    if (residual_blocks % lines_per_block != 0) {
         myprintf("\nInconsistent number of weights in the file.\n");
         return {0, 0};
     }
-    residual_blocks /= 8;
+    residual_blocks /= lines_per_block;
     myprintf("%d blocks.\n", residual_blocks);
 
     // Re-read file and process
@@ -269,6 +273,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
 
     const auto plain_conv_layers = 1 + (residual_blocks * 2);
     const auto plain_conv_wts = plain_conv_layers * 4;
+    const auto se_wts_begin = plain_conv_wts + 14;
     linecount = 0;
     while (std::getline(wtfile, line)) {
         std::vector<float> weights;
@@ -293,7 +298,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                 process_bn_var(weights);
                 m_fwd_weights->m_batchnorm_stddevs.emplace_back(weights);
             }
-        } else {
+        } else if (linecount < se_wts_begin) {
             switch (linecount - plain_conv_wts) {
                 case  0: m_fwd_weights->m_conv_pol_w = std::move(weights); break;
                 case  1: m_fwd_weights->m_conv_pol_b = std::move(weights); break;
@@ -319,6 +324,13 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                                    begin(m_ip2_val_w)); break;
                 case 13: std::copy(cbegin(weights), cend(weights),
                                    begin(m_ip2_val_b)); break;
+            }
+        } else {
+            switch ((linecount - se_wts_begin) % 4) {
+                case 0: m_fwd_weights->m_se_fc1_weights.emplace_back(weights); break;
+                case 1: m_fwd_weights->m_se_fc1_biases.emplace_back(weights); break;
+                case 2: m_fwd_weights->m_se_fc2_weights.emplace_back(weights); break;
+                case 3: m_fwd_weights->m_se_fc2_biases.emplace_back(weights); break;
             }
         }
         linecount++;
@@ -361,14 +373,17 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
         auto iss = std::stringstream{line};
         // First line is the file format version id
         iss >> format_version;
-        if (iss.fail() || (format_version != 1 && format_version != 2)) {
+        if (iss.fail() || (format_version <= 0 || format_version > 3)) {
             myprintf("Weights file is the wrong version.\n");
             return {0, 0};
         } else {
             // Version 2 networks are identical to v1, except
             // that they return the value for black instead of
             // the player to move. This is used by ELF Open Go.
-            if (format_version == 2) {
+            if (format_version == 3) {
+                m_has_se = true;
+            }
+            if (format_version == 2 || format_version == 3) {
                 m_value_head_not_stm = true;
             } else {
                 m_value_head_not_stm = false;

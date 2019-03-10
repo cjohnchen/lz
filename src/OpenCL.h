@@ -53,10 +53,13 @@ class Layer {
 private:
     unsigned int channels{0};
     unsigned int outputs{0};
+    unsigned int se_fc_outputs{0};
     unsigned int filter_size{0};
     bool is_input_convolution{false};
     bool is_residual_block{false};
     bool is_convolve1{false};
+    bool has_se{false};
+    bool has_se_bias{false};
     std::vector<cl::Buffer> weights;
 };
 
@@ -72,10 +75,14 @@ private:
     cl::Kernel m_sgemm_kernel;
     cl::Kernel m_out_transform_bn_kernel;
     cl::Kernel m_out_transform_bn_in_kernel;
+    cl::Kernel m_global_avg_pooling_kernel;
+    cl::Kernel m_apply_se_kernel;
+    cl::Kernel m_relu_kernel;
     cl::Buffer m_inBuffer;
     cl::Buffer m_inBuffer2;
     cl::Buffer m_VBuffer;
     cl::Buffer m_MBuffer;
+    cl::Buffer m_pool_buffer;
     cl::Buffer m_pinnedOutBuffer_pol;
     cl::Buffer m_pinnedOutBuffer_val;
     bool m_buffers_allocated{false};
@@ -127,6 +134,20 @@ public:
         m_layers[layer].channels = channels;
     }
 
+    void push_se(unsigned int layer,
+        const std::vector<float>& weights_se1,
+        const std::vector<float>& biases_se1,
+        const std::vector<float>& weights_se2,
+        const std::vector<float>& biases_se2) {
+        push_float_weights(layer, weights_se1);
+        push_float_weights(layer, biases_se1);
+        push_float_weights(layer, weights_se2);
+        push_float_weights(layer, biases_se2);
+        m_layers[layer].has_se = true;
+        m_layers[layer].has_se_bias = weights_se2.size() == 2 * weights_se1.size();
+        m_layers[layer].se_fc_outputs = biases_se1.size();
+    }
+
     void push_convolve(unsigned int filter_size,
                        unsigned int channels,
                        unsigned int outputs,
@@ -157,7 +178,23 @@ private:
     void push_weights(size_t layer, const std::vector<net_t>& weights) {
         add_weights(layer, weights.size(), weights.data());
     }
+    void push_float_weights(size_t layer, const std::vector<float>& weights) {
+        add_float_weights(layer, weights.size(), weights.data());
+    }
     void add_weights(size_t layer, size_t size, const net_t* weights);
+    void add_float_weights(size_t layer, size_t size, const float * weights);
+
+    void OpenCL_Network<net_t>::squeeze_excitation(
+        OpenCLContext & opencl_context,
+        int channels,
+        int fc_outputs,
+        cl::Buffer& bufferIn,
+        cl::Buffer& bufferTemp1,
+        cl::Buffer& bufferTemp2,
+        weight_slice_t weights,
+        cl::Buffer& bufferResidual,
+        int batch_size,
+        bool has_se_bias);
 
     void convolve3(OpenCLContext & opencl_context,
                     int channels, int outputs,
@@ -169,6 +206,7 @@ private:
                     weight_slice_t bn_weights,
                     bool skip_in_transform,
                     bool fuse_in_transform, bool store_inout,
+                    bool relu,
                     int batch_size);
 
     void convolve1(OpenCLContext & opencl_context,

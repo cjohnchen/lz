@@ -50,7 +50,7 @@ def getMinigoWeightsV1(model):
         weights_v2_format.append((w.name, nparray))
     return weights_v2_format
 
-def getMinigoWeightsV2(model):
+def getMinigoWeightsV2V3(model):
     """Load and massage Minigo weights to Leela format.
 
     This version works on older models (v9 or before)
@@ -59,6 +59,7 @@ def getMinigoWeightsV2(model):
          https://github.com/gcp/leela-zero/issues/2020
     """
     var_names = tf.train.load_checkpoint(model).get_variable_to_dtype_map()
+    print(var_names)
 
     # count() overcounts by 3 from policy/value head and each layer has two convolutions.
     layers = (max([count for n, count in deduped(var_names)]) - 3) // 2
@@ -106,16 +107,25 @@ def getMinigoWeightsV2(model):
         number = tensor_number(number)
         weight_names.append('dense{}/kernel:0'.format(number))
         weight_names.append('dense{}/bias:0'.format(number))
-
+    
+    senet = deduped(var_names)[0][1] == deduped(var_names)[1][1]
+    if senet:
+        print('Squeeze and Excitation')
+    se_offset = 2 * layers if senet else 0
+    
     # This blindly builds the correct names for the tensors.
     for l in range(2 * layers + 1):
         add_conv(l)
 
     add_conv(2 * layers + 1, with_gamma=False)
-    add_dense(0)
+    add_dense(se_offset)
     add_conv(2 * layers + 2, with_gamma=False)
-    add_dense(1)
-    add_dense(2)
+    add_dense(1 + se_offset)
+    add_dense(2 + se_offset)
+    
+    if senet:
+        for l in range(2 * layers):
+            add_dense(l)
 
     # This tries to load the data for each tensors.
     weights = []
@@ -127,7 +137,7 @@ def getMinigoWeightsV2(model):
 
 #        print ("{:45} {} {}".format(name, type(w), w.shape))
         weights.append((name, w))
-    return weights
+    return [weights, senet]
 
 def merge_gammas(weights):
     out_weights = []
@@ -159,7 +169,9 @@ def merge_gammas(weights):
         elif matches(name, ('dense', 'kernel')):
             # Minigo uses channels last order while LZ uses channels first,
             # Do some surgery for the dense layers to make the output match.
+            # print(w.shape)
             planes = w.shape[0] // 361
+            # happens to correctly disregard the (256,128), (128,512) SE layers
             if planes > 0:
                 w1 = np.reshape(w, [19, 19, planes, -1])
                 w2 = np.transpose(w1, [2, 0, 1, 3])
@@ -172,11 +184,11 @@ def merge_gammas(weights):
 
     return out_weights
 
-def save_leelaz_weights(filename, weights):
+def save_leelaz_weights(filename, weights, senet=False):
     with gzip.open(filename, 'wb') as f_out:
         # Version tag
         # Minigo outputs winrate from blacks point of view (same as ELF)
-        f_out.write(b'2')
+        f_out.write(b'3' if senet else b'2')
         for e, w in enumerate(weights):
             # Newline unless last line (single bias)
             f_out.write(b'\n')
@@ -227,7 +239,7 @@ def main():
 
     # Can be used for v9 or before models.
     # weights = getMinigoWeightsV1(model)
-    weights = getMinigoWeightsV2(model)
+    weights, senet = getMinigoWeightsV2V3(model)
     if 0:
         for name, variables in [
                 ('load_checkpoint', var_names.keys()),
@@ -238,7 +250,7 @@ def main():
             print (deduped(variables))
             print ()
 
-    save_leelaz_weights(model + '_converted.txt.gz', merge_gammas(weights))
+    save_leelaz_weights(model + '_converted.txt.gz', merge_gammas(weights), senet)
 
 if __name__ == "__main__":
     main()

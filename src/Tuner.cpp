@@ -247,7 +247,7 @@ std::string Tuner<net_t>::parameters_to_string(const Parameters& p) {
 }
 
 static size_t next_power_of_two(const size_t x) {
-    return 2 << size_t(std::ceil(std::log2(x)) - 1);
+    return 2 << size_t(std::ceil(std::log2(x)) - 1); // why minus one?
 }
 
 template <typename net_t>
