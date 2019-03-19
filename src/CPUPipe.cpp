@@ -27,7 +27,7 @@
 #ifdef USE_OPENBLAS
 #include <cblas.h>
 #endif
-#ifndef USE_BLAS
+#ifndef USE_BLAS  
 #include <Eigen/Dense>
 #endif
 
