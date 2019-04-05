@@ -426,29 +426,6 @@ __kernel void out_transform_fused_bn_in(
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    const int ks = get_local_size(0);
-    const int k0 = get_group_id(0) * get_local_size(0);
-
-    for (int x = get_local_id(0) + ks * get_local_id(1); x < ks * NUM_INTERSECTIONS; x += get_local_size(1) * get_local_size(0)) {
-        const int kx = x / NUM_INTERSECTIONS;
-        const int idx = x - kx * NUM_INTERSECTIONS;
-
-        const int kHWx = batch * K * NUM_INTERSECTIONS + (k0 + kx) * NUM_INTERSECTIONS;
-
-        real acc = ybuf[kx * NUM_INTERSECTIONS + idx];
-        if (residual) {
-            acc += vload_net_t(kHWx + idx, residual);
-        }
-        acc = acc > ZERO ? acc : ZERO;
-
-        if (Y) {
-            vstore_net_t(acc, kHWx + idx, Y);
-        }
-        ybuf[kx * NUM_INTERSECTIONS + idx] = acc;
-    }
-
-    barrier(CLK_LOCAL_MEM_FENCE);
-
     const int yin = WINOGRAD_M * block_y - 1;
     const int xin = WINOGRAD_M * block_x - 1;
 
