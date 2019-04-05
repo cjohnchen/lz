@@ -1,6 +1,6 @@
 /*
     This file is part of Leela Zero.
-    Copyright (C) 2017-2018 Gian-Carlo Pascutto and contributors
+    Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -14,6 +14,17 @@
 
     You should have received a copy of the GNU General Public License
     along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
+
+    Additional permission under GNU GPL version 3 section 7
+
+    If you modify this Program, or any covered work, by linking or
+    combining it with NVIDIA Corporation's libraries from the
+    NVIDIA CUDA Toolkit and/or the NVIDIA CUDA Deep Neural
+    Network library and/or the NVIDIA TensorRT inference library
+    (or a modified version of those libraries), containing parts covered
+    by the terms of the respective license agreement, the licensors of
+    this Program grant you additional permission to convey the resulting
+    work.
 */
 
 // Enables loading of this file using the C++ pre-processor's #include (C++11 standard raw string
@@ -334,7 +345,7 @@ __kernel void out_transform_fused_bn_in(
     const int kHW = batch * K * NUM_INTERSECTIONS + k * NUM_INTERSECTIONS;
 
     __local real ybuf[OUTIN_KWG * NUM_INTERSECTIONS];
-
+  
     if (k < K && block < P) {
 
         const real mean = vload_net_t(k, means);
@@ -388,6 +399,29 @@ __kernel void out_transform_fused_bn_in(
                 ybuf[kg * NUM_INTERSECTIONS + out_idx] = r.w;
             }
         }
+    }
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    const int ks = get_local_size(0);
+    const int k0 = get_group_id(0) * get_local_size(0);
+
+    for (int x = get_local_id(0) + ks * get_local_id(1); x < ks * NUM_INTERSECTIONS; x += get_local_size(1) * get_local_size(0)) {
+        const int kx = x / NUM_INTERSECTIONS;
+        const int idx = x - kx * NUM_INTERSECTIONS;
+
+        const int kHWx = batch * K * NUM_INTERSECTIONS + (k0 + kx) * NUM_INTERSECTIONS;
+
+        real acc = ybuf[kx * NUM_INTERSECTIONS + idx];
+        if (residual) {
+            acc += vload_net_t(kHWx + idx, residual);
+        }
+        acc = acc > ZERO ? acc : ZERO;
+
+        if (Y) {
+            vstore_net_t(acc, kHWx + idx, Y);
+        }
+        ybuf[kx * NUM_INTERSECTIONS + idx] = acc;
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
