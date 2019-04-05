@@ -39,6 +39,7 @@
 #include "Console.h"
 
 int main(int argc, char *argv[]) {
+    bool consoleOn = false;
     QCoreApplication app(argc, argv);
     app.setApplicationName("autogtp");
     app.setApplicationVersion(QString("v%1").arg(AUTOGTP_VERSION));
@@ -153,7 +154,7 @@ int main(int argc, char *argv[]) {
     if (parser.isSet(singleOption) || parser.isSet(maxOption)) {
         QObject::connect(boss, &Management::sendQuit, &app, &QCoreApplication::quit);
     }
-    if (true) {
+    if(consoleOn) {
         cons = new Console();
         QObject::connect(cons, &Console::sendQuit, &app, &QCoreApplication::quit);
     }

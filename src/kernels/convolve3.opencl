@@ -345,7 +345,7 @@ __kernel void out_transform_fused_bn_in(
     const int kHW = batch * K * NUM_INTERSECTIONS + k * NUM_INTERSECTIONS;
 
     __local real ybuf[OUTIN_KWG * NUM_INTERSECTIONS];
-
+  
     if (k < K && block < P) {
 
         const real mean = vload_net_t(k, means);
@@ -399,6 +399,29 @@ __kernel void out_transform_fused_bn_in(
                 ybuf[kg * NUM_INTERSECTIONS + out_idx] = r.w;
             }
         }
+    }
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    const int ks = get_local_size(0);
+    const int k0 = get_group_id(0) * get_local_size(0);
+
+    for (int x = get_local_id(0) + ks * get_local_id(1); x < ks * NUM_INTERSECTIONS; x += get_local_size(1) * get_local_size(0)) {
+        const int kx = x / NUM_INTERSECTIONS;
+        const int idx = x - kx * NUM_INTERSECTIONS;
+
+        const int kHWx = batch * K * NUM_INTERSECTIONS + (k0 + kx) * NUM_INTERSECTIONS;
+
+        real acc = ybuf[kx * NUM_INTERSECTIONS + idx];
+        if (residual) {
+            acc += vload_net_t(kHWx + idx, residual);
+        }
+        acc = acc > ZERO ? acc : ZERO;
+
+        if (Y) {
+            vstore_net_t(acc, kHWx + idx, Y);
+        }
+        ybuf[kx * NUM_INTERSECTIONS + idx] = acc;
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
