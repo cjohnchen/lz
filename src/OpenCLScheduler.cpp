@@ -1,6 +1,6 @@
 /*
     This file is part of Leela Zero.
-    Copyright (C) 2018 Junhee Yoo and contributors
+    Copyright (C) 2018-2019 Junhee Yoo and contributors
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -14,6 +14,17 @@
 
     You should have received a copy of the GNU General Public License
     along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
+
+    Additional permission under GNU GPL version 3 section 7
+
+    If you modify this Program, or any covered work, by linking or
+    combining it with NVIDIA Corporation's libraries from the
+    NVIDIA CUDA Toolkit and/or the NVIDIA CUDA Deep Neural
+    Network library and/or the NVIDIA TensorRT inference library
+    (or a modified version of those libraries), containing parts covered
+    by the terms of the respective license agreement, the licensors of
+    this Program grant you additional permission to convey the resulting
+    work.
 */
 #include "config.h"
 
@@ -189,7 +200,7 @@ template<typename net_t>
 bool OpenCLScheduler<net_t>::needs_autodetect() {
     for (auto& opencl : m_opencl) {
         // If any card has no native fp16 compute, we'll have to benchmark.
-        if (!opencl->has_fp16_compute()) {
+        if (!opencl->has_fp16_compute() && !opencl->has_tensor_cores()) {
             return true;
         }
     }

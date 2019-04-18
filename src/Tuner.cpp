@@ -1,6 +1,6 @@
 /*
     This file is part of Leela Zero.
-    Copyright (C) 2017-2018 Gian-Carlo Pascutto and contributors
+    Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -14,6 +14,17 @@
 
     You should have received a copy of the GNU General Public License
     along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
+
+    Additional permission under GNU GPL version 3 section 7
+
+    If you modify this Program, or any covered work, by linking or
+    combining it with NVIDIA Corporation's libraries from the
+    NVIDIA CUDA Toolkit and/or the NVIDIA CUDA Deep Neural
+    Network library and/or the NVIDIA TensorRT inference library
+    (or a modified version of those libraries), containing parts covered
+    by the terms of the respective license agreement, the licensors of
+    this Program grant you additional permission to convey the resulting
+    work.
 */
 
 #include "config.h"
@@ -159,7 +170,7 @@ bool Tuner<net_t>::valid_config_sgemm(Parameters p, bool exhaustive) {
             return false;
         }
 
-        // in tensorcore implementations, MDIMA and NDIMB represents the
+        // In Tensor Core implementations, MDIMA and NDIMB represents the
         // wmmv multiplication dimensions, that is,
         // m16n16k16 / m32n8k16 / m8n32k16.  Thus m * n is fixed to 256.
         if (p["MDIMA"] * p["NDIMB"] != 256) {
@@ -171,14 +182,14 @@ bool Tuner<net_t>::valid_config_sgemm(Parameters p, bool exhaustive) {
         if (p["NWG"] < p["NDIMC"]) {
             return false;
         }
-	if (p["MDIMC"] < p["MDIMA"]) {
+        if (p["MDIMC"] < p["MDIMA"]) {
             return false;
         }
-	if (p["NDIMC"] < p["NDIMB"]) {
+        if (p["NDIMC"] < p["NDIMB"]) {
             return false;
         }
         // VWM / VWN has no meaning if we don't do SA / SB.
-        // only test VWM / VWN == 2
+        // Only test VWM / VWN == 2
         if (p["SA"] == 0 && p["VWM"] != 2) {
             return false;
         }
@@ -319,7 +330,7 @@ std::vector<Parameters> Tuner<net_t>::build_valid_params() {
             {"SB", {1}},
         };
     }
-    // tensorcore options
+    // Tensor Core options
     auto topts = std::vector<Configurations>();
     if (cfg_sgemm_exhaustive) {
         topts = {
@@ -357,11 +368,8 @@ std::vector<Parameters> Tuner<net_t>::build_valid_params() {
         };
     }
 
-    // Don't use thead Rng or determism will depend on if tuner ran.
-    auto rng = Random{0};
-
     auto valid_params = std::vector<Parameters>{};
-    auto build_from = [this, &rng, &valid_params](std::vector<Configurations> & opts, int tce) {
+    auto build_from = [this, &valid_params](std::vector<Configurations> & opts, int tce) {
         auto cfgs = 1;
         for (auto c = size_t{0}; c < opts.size(); c++) {
             cfgs *= opts[c].second.size();
@@ -370,11 +378,6 @@ std::vector<Parameters> Tuner<net_t>::build_valid_params() {
             Parameters param = get_parameters_by_int(opts, i);
             param["TCE"] = tce;
             if (valid_config_sgemm(param, cfg_sgemm_exhaustive)) {
-                if (cfg_sgemm_exhaustive) {
-                    if (rng.randfix<16>() != 0) {
-                        continue;
-                    }
-                }
                 valid_params.push_back(param);
             }
         }
@@ -382,7 +385,16 @@ std::vector<Parameters> Tuner<net_t>::build_valid_params() {
     build_from(opts, 0);
     build_from(topts, 1);
 
-    return std::move(valid_params);
+    // Don't use thread RNG or determinism will depend on whether tuner ran.
+    auto rng = Random{0};
+    std::shuffle(begin(valid_params), end(valid_params), rng);
+
+    if (cfg_sgemm_exhaustive) {
+        // Likely too many valid params, cut out some of them
+        valid_params.resize(valid_params.size() / 16);
+    }
+
+    return valid_params;
 }
 
 template <typename net_t>
@@ -496,7 +508,7 @@ std::string Tuner<net_t>::tune_sgemm(const int m, const int n, const int k,
         cl::NDRange size_sgemm = {(m_ceil * p["MDIMC"]) / p["MWG"],
                                   (n_ceil * p["NDIMC"]) / p["NWG"],
                                   size_t(batch_size)};
-        // tensorcore implementation uses a different dimension
+        // Tensor Core implementation uses a different dimension.
         if (p["TCE"]) {
             local_sgemm = {32 * p["MDIMC"] / p["MDIMA"], p["NDIMC"] / p["NDIMB"], 1};
             size_sgemm = {32 * m_ceil / p["MDIMA"] * p["MDIMC"] / p["MWG"],
