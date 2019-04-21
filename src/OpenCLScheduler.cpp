@@ -374,7 +374,7 @@ void OpenCLScheduler<net_t>::batch_worker(const size_t gnum, const size_t i) {
     auto count = written_loc.load();
 
     while (m_running) {
-        if (count == batch_size || (count > 0 && failures > 10 && !opencl->m_occupied)) {
+        if (count == batch_size || (count > 0 && failures > MAX_FAILURES && !opencl->m_occupied)) {
             opencl->m_occupied++;
             batch_output_pol.resize(out_pol_size * count);
             batch_output_val.resize(out_val_size * count);
