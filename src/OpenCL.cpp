@@ -209,7 +209,7 @@ void OpenCL_Network<net_t>::forward(const net_t* input,
     cl::Buffer & MBuffer = opencl_context.m_MBuffer;
     cl::CommandQueue & queue = opencl_context.m_commandqueue;
 
-    std::unique_lock<std::mutex> enqueue_lock(m_enqueue_mutex);
+    //std::unique_lock<std::mutex> enqueue_lock(m_enqueue_mutex);
 
     constexpr auto in_size = Network::INPUT_CHANNELS * BOARD_SIZE * BOARD_SIZE;
     queue.enqueueWriteBuffer(inBuffer, CL_FALSE, 0, sizeof(net_t) * in_size * batch_size, input);
@@ -316,7 +316,10 @@ void OpenCL_Network<net_t>::forward(const net_t* input,
     //std::unique_lock<std::mutex> finish_lock(m_queue_finish_mutex);
     //enqueue_lock.lock();
     //std::unique_lock<std::mutex> enqueue_lock(m_enqueue_mutex);
-    queue.finish();
+    {
+        std::lock_guard<std::mutex> enqueue_lock(m_enqueue_mutex);
+        queue.finish();
+    }
     //finish_lock.unlock();
     //enqueue_lock.unlock();
     
@@ -355,7 +358,7 @@ void OpenCL_Network<net_t>::forward(const net_t* input,
             pinnedOutBufferHost_pol);
     queue.enqueueUnmapMemObject(opencl_context.m_pinnedOutBuffer_val,
             pinnedOutBufferHost_val);
-    enqueue_lock.unlock();
+    //enqueue_lock.unlock();
 
     if (--m_opencl.m_occupied == 0) {
         m_opencl.idle_count++;
