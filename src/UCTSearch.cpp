@@ -991,20 +991,20 @@ int UCTSearch::think(int color, passflag_t passflag) {
         Time elapsed;
         int elapsed_centis = Time::timediff_centis(start, elapsed);
         std::this_thread::sleep_for(std::chrono::milliseconds(
-            std::min(std::min(cfg_analyze_tags.interval_centis() - (elapsed_centis - last_output),
-                250 - (elapsed_centis - last_update)), time_for_move - elapsed_centis) * 10));
+            std::min(//std::min(cfg_analyze_tags.interval_centis() - (elapsed_centis - last_output),
+                250 - (elapsed_centis - last_update), time_for_move - elapsed_centis) * 10));
         Time elapsed0;
         elapsed_centis = Time::timediff_centis(start, elapsed0);
 
         if (cfg_analyze_tags.interval_centis() &&
-            elapsed_centis - last_output > cfg_analyze_tags.interval_centis()) {
+            elapsed_centis - last_output >= cfg_analyze_tags.interval_centis()) {
             last_output = elapsed_centis;
             output_analysis(m_rootstate, *m_root);
         }
 
         // output some stats every few seconds
         // check if we should still search
-        if (!cfg_quiet && elapsed_centis - last_update > 250) {
+        if (!cfg_quiet && elapsed_centis - last_update >= 250) {
             last_update = elapsed_centis;
 #ifdef SEARCH_INFO
             myprintf("%s\n", get_analysis(m_playouts.load()).c_str());
