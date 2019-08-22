@@ -31,9 +31,9 @@
 #define CONFIG_H_INCLUDED
 
 #define DISPLAY_TIME
-//#define DISPLAY_BOARD
-//#define DEBUG_INFO
-//#define SEARCH_INFO
+#define DISPLAY_BOARD
+#define DEBUG_INFO
+#define SEARCH_INFO
 //#define ACCUM_DEBUG
 //#define LOCK_DEBUG
 //#define UCT_SOFTMAX
