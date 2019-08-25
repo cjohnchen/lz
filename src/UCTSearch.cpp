@@ -990,9 +990,11 @@ int UCTSearch::think(int color, passflag_t passflag) {
     do {
         Time elapsed;
         int elapsed_centis = Time::timediff_centis(start, elapsed);
-        std::this_thread::sleep_for(std::chrono::milliseconds(
-            std::min(//std::min(cfg_analyze_tags.interval_centis() - (elapsed_centis - last_output),
-                250 - (elapsed_centis - last_update), time_for_move - elapsed_centis) * 10));
+        auto sleep_duration = std::min(250 - (elapsed_centis - last_update), time_for_move - elapsed_centis);
+        if (cfg_analyze_tags.interval_centis()) {
+            sleep_duration = std::min(sleep_duration, cfg_analyze_tags.interval_centis() - (elapsed_centis - last_output));
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleep_duration * 10));
         Time elapsed0;
         elapsed_centis = Time::timediff_centis(start, elapsed0);
 
@@ -1036,21 +1038,22 @@ int UCTSearch::think(int color, passflag_t passflag) {
         return FastBoard::PASS;
     }
 
+    myprintf("\n");
+#ifdef DEBUG_INFO
+    myprintf("sizeof(UCTNode) is %d\n", sizeof(UCTNode));
+    myprintf("sizeof(UCTNodePointer) is %d\n", sizeof(UCTNodePointer));
+#endif
 #ifdef SEARCH_INFO
     // Display search info.
-    myprintf("\n");
     dump_stats(m_rootstate, *m_root);
     //Training::record(m_network, m_rootstate, *m_root);
 #endif
 
     Time elapsed;
     int elapsed_centis = Time::timediff_centis(start, elapsed);
-#ifdef DEBUG_INFO
-    myprintf("sizeof(UCTNode) is %d\n", sizeof(UCTNode));
-    myprintf("sizeof(UCTNodePointer) is %d\n", sizeof(UCTNodePointer));
-#endif
     if (elapsed_centis+1 > 0) {
 #ifdef SEARCH_INFO
+        m_network.dump_stats();
         myprintf("%7.2f visits, %u nodes, %u inflated, %d playouts, %.0f n/s, %.0f pos/s\n\n",
                  m_root->get_visits(),
             UCTNodePointer::m_nodes.load(), UCTNodePointer::m_inflated_nodes.load(),
@@ -1058,7 +1061,6 @@ int UCTSearch::think(int color, passflag_t passflag) {
                  (m_playouts * 100.0) / (elapsed_centis+1),
                  (m_positions * 100.0) / (elapsed_centis+1));
 
-        m_network.dump_stats();
 #endif
 #ifdef ACCUM_DEBUG
         myprintf("failed simulations: %u\n", failed_simulations.load());
@@ -1084,6 +1086,7 @@ int UCTSearch::think(int color, passflag_t passflag) {
         % m_rootstate.move_to_text(bestmove).c_str()
         % get_analysis(m_root->get_visits()).c_str());
 
+    myprintf("This is move %d\n", m_rootstate.get_movenum());
     // Copy the root state. Use to check for tree re-use in future calls.
     m_last_rootstate = std::make_unique<GameState>(m_rootstate);
     return bestmove;
@@ -1126,14 +1129,19 @@ void UCTSearch::ponder() {
         output_analysis(m_rootstate, *m_root);
     }
 
+    Time elapsed;
+    auto elapsed_centis = Time::timediff_centis(start, elapsed);
 #ifdef SEARCH_INFO
     // Display search info.
     myprintf("\n");
     dump_stats(m_rootstate, *m_root);
-
-    myprintf("\n%7.2f visits, %u nodes, %u inflated\n\n", m_root->get_visits(), 
-        UCTNodePointer::m_nodes.load(), UCTNodePointer::m_inflated_nodes.load());
     m_network.dump_stats();
+    myprintf("%7.2f visits, %u nodes, %u inflated, %d playouts, %.0f n/s, %.0f pos/s\n\n",
+        m_root->get_visits(),
+        UCTNodePointer::m_nodes.load(), UCTNodePointer::m_inflated_nodes.load(),
+        m_playouts.load(),
+        (m_playouts * 100.0) / (elapsed_centis + 1),
+        (m_positions * 100.0) / (elapsed_centis + 1));
 #endif
 #ifdef ACCUM_DEBUG
     myprintf("failed simulations: %u\n", failed_simulations.load());
@@ -1146,6 +1154,7 @@ void UCTSearch::ponder() {
     myprintf("min pending netresults: %u\n", min_pending_netresults.load());
     myprintf("pending netresults: %u\n", pending_netresults.load());
 #endif
+    myprintf("This is move %d (pondering)\n", m_rootstate.get_movenum());
     // Copy the root state. Use to check for tree re-use in future calls.
     if (!disable_reuse) {
         m_last_rootstate = std::make_unique<GameState>(m_rootstate);
