@@ -113,8 +113,9 @@ void UCTNodePointer::inflate() const {
         if (is_inflated(v)) return;
 
         auto v2 = reinterpret_cast<std::uint64_t>(
-            new UCTNode(read_vertex(v), read_policy(v))
-        ) | POINTER;
+            new UCTNode(read_vertex(v), read_policy(v)));
+        assert((v2 & 3ULL) == 0);
+        v2 |= POINTER;
         bool success = m_data.compare_exchange_strong(v, v2);
         if (success) {
             increment_tree_size(sizeof(UCTNode));

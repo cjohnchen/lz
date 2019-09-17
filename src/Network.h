@@ -110,10 +110,10 @@ public:
     size_t get_estimated_size();
     size_t get_estimated_cache_size();
     void nncache_resize(int max_count);
+    void nncache_clear();
 
     void clear_stats() { m_forward->clear_stats(); m_nncache.clear_stats(); }
     void dump_stats() { m_forward->dump_stats(); m_nncache.dump_stats(); }
-    void nncache_clear();
 
     //int get_max_size() { return m_forward->m_max_queue_size.load(); }
     void set_search(UCTSearch* search) { m_search = m_forward->m_search = search; m_forward->m_network = this; }
