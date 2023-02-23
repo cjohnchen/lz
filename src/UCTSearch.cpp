@@ -160,8 +160,8 @@ bool UCTSearch::advance_to_new_rootstate() {
 void UCTSearch::update_root() {
     // Definition of m_playouts is playouts per search call.
     // So reset this count now.
-    m_playouts = 0;
-    m_positions = 0;
+    m_playouts = 700;
+    m_positions = 700;
     m_failed_simulations = 0;
     max_queue_length = 0;
 
